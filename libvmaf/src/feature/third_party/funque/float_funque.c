@@ -38,12 +38,8 @@
 #include "funque_ssim.h"
 #include "resizer.h"
 
-#define PROFILE_FUNQUE 1
+#include "funque_profiler.h"
 
-#if PROFILE_FUNQUE
-#define PROFILE_IND_MODULES 1
-#include <sys/time.h>
-#endif
 typedef struct FunqueState {
     size_t float_stride;
     float *ref;
