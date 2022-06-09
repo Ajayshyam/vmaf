@@ -30,6 +30,8 @@
 #include "vif_options.h"
 #include "picture_copy.h"
 
+#include "funque_profiler.h"
+
 typedef struct VifState {
     size_t float_stride;
     float *ref;
@@ -107,14 +109,27 @@ static int extract(VmafFeatureExtractor *fex,
                    VmafPicture *dist_pic, VmafPicture *dist_pic_90,
                    unsigned index, VmafFeatureCollector *feature_collector)
 {
+#if PROFILE_FUNQUE
+    struct timeval start_time, end_time;
+    struct timeval pictcopy_start, pictcopy_end;
+    // start timer.
+    gettimeofday(&start_time, NULL);
+#endif
+
     VifState *s = fex->priv;
     int err = 0;
 
     (void) ref_pic_90;
     (void) dist_pic_90;
 
+#if PROFILE_IND_MODULES
+    gettimeofday(&pictcopy_start, NULL);
+#endif
     picture_copy(s->ref, s->float_stride, ref_pic, -128, ref_pic->bpc);
     picture_copy(s->dist, s->float_stride, dist_pic, -128, dist_pic->bpc);
+#if PROFILE_IND_MODULES
+    gettimeofday(&pictcopy_end, NULL);
+#endif
 
     double score, score_num, score_den;
     double scores[8];
@@ -140,6 +155,19 @@ static int extract(VmafFeatureExtractor *fex,
     err |= vmaf_feature_collector_append_with_dict(feature_collector,
             s->feature_name_dict, "VMAF_feature_vif_scale3_score",
             scores[6] / scores[7], index);
+
+#if PROFILE_FUNQUE
+    gettimeofday(&end_time, NULL);
+    double time_taken, pictcopy_time;
+    time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+    time_taken = (time_taken + (end_time.tv_usec - 
+                            start_time.tv_usec)) * 1e-6;
+    pictcopy_time = ((pictcopy_end.tv_sec - pictcopy_start.tv_sec) * 1e6 +
+                    (pictcopy_end.tv_usec - pictcopy_start.tv_usec)) * 1e-6;
+
+
+    printf("%f,%f\n", pictcopy_time, (time_taken-pictcopy_time));
+#endif
 
     if (!s->debug) return err;
 

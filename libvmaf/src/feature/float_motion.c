@@ -30,6 +30,7 @@
 
 #include "picture_copy.h"
 
+#include "funque_profiler.h"
 typedef struct MotionState {
     size_t float_stride;
     float *ref;
@@ -120,6 +121,12 @@ static int extract(VmafFeatureExtractor *fex,
                    VmafPicture *dist_pic, VmafPicture *dist_pic_90,
                    unsigned index, VmafFeatureCollector *feature_collector)
 {
+#if PROFILE_FUNQUE
+    struct timeval start_time, end_time;
+    struct timeval pictcopy_start, pictcopy_end;
+    // start timer.
+    gettimeofday(&start_time, NULL);
+#endif
     MotionState *s = fex->priv;
     int err = 0;
 
@@ -146,7 +153,16 @@ static int extract(VmafFeatureExtractor *fex,
     unsigned blur_idx_1 = (index + 1) % 3;
     unsigned blur_idx_2 = (index + 2) % 3;
 
+#if PROFILE_IND_MODULES
+    gettimeofday(&pictcopy_start, NULL);
+#endif
+
     picture_copy(s->ref, s->float_stride, ref_pic, -128, ref_pic->bpc);
+
+#if PROFILE_IND_MODULES
+    gettimeofday(&pictcopy_end, NULL);
+#endif
+
     convolution_f32_c_s(FILTER_5_s, 5, s->ref, s->blur[blur_idx_0], s->tmp,
                         ref_pic->w[0], ref_pic->h[0],
                         s->float_stride / sizeof(float),
@@ -161,6 +177,18 @@ static int extract(VmafFeatureExtractor *fex,
                                                  "VMAF_feature_motion_score",
                                                  0., index);
         }
+#if PROFILE_FUNQUE
+        gettimeofday(&end_time, NULL);
+        double time_taken, pictcopy_time;
+        time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+        time_taken = (time_taken + (end_time.tv_usec - 
+                                start_time.tv_usec)) * 1e-6;
+        pictcopy_time = ((pictcopy_end.tv_sec - pictcopy_start.tv_sec) * 1e6 +
+                        (pictcopy_end.tv_usec - pictcopy_start.tv_usec)) * 1e-6;
+
+
+        printf("%f,%f,", pictcopy_time, (time_taken-pictcopy_time));
+#endif
         return err;
     }
 
@@ -179,7 +207,21 @@ static int extract(VmafFeatureExtractor *fex,
     s->score = score;
 
     if (index == 1)
+    {
+#if PROFILE_FUNQUE
+        gettimeofday(&end_time, NULL);
+        double time_taken, pictcopy_time;
+        time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+        time_taken = (time_taken + (end_time.tv_usec - 
+                                start_time.tv_usec)) * 1e-6;
+        pictcopy_time = ((pictcopy_end.tv_sec - pictcopy_start.tv_sec) * 1e6 +
+                        (pictcopy_end.tv_usec - pictcopy_start.tv_usec)) * 1e-6;
+
+
+        printf("%f,%f,", pictcopy_time, (time_taken-pictcopy_time));
+#endif
         return 0;
+    }
     
     double score2;
     err = compute_motion(s->blur[blur_idx_2], s->blur[blur_idx_1],
@@ -191,7 +233,18 @@ static int extract(VmafFeatureExtractor *fex,
                                         "VMAF_feature_motion2_score",
                                         score2, index - 1);
     if (err) return err;
+#if PROFILE_FUNQUE
+    gettimeofday(&end_time, NULL);
+    double time_taken, pictcopy_time;
+    time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+    time_taken = (time_taken + (end_time.tv_usec - 
+                            start_time.tv_usec)) * 1e-6;
+    pictcopy_time = ((pictcopy_end.tv_sec - pictcopy_start.tv_sec) * 1e6 +
+                    (pictcopy_end.tv_usec - pictcopy_start.tv_usec)) * 1e-6;
 
+
+    printf("%f,%f,", pictcopy_time, (time_taken-pictcopy_time));
+#endif
     return 0;
 }
 
