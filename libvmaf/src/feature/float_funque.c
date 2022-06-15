@@ -261,6 +261,8 @@ static int init(VmafFeatureExtractor *fex, enum VmafPixelFormat pix_fmt,
                 fex->options, s);
     if (!s->feature_name_dict) goto fail;
 
+    log_generate();
+
     return 0;
 
 fail:
