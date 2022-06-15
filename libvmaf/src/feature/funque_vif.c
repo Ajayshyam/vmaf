@@ -473,7 +473,7 @@ int compute_vif_funque(const double* x, const double* y, size_t width, size_t he
             var_x_t[index] = var_x_t[index] >> 2;
 
             //Q30
-            int64_t exp_add = (1e-4 * (1 << 30));
+            // int64_t exp_add = (1e-4 * (1 << 30));
 
             //Q30 = Q30+(Q16*Q16*Q30/(Q32 + Q32))
             int64_t num_t= (1 << 30) +  g_t[index] * g_t[index] * var_x_t[index] / (sv_sq_t[index] + sigma_nsq_t);
@@ -492,10 +492,16 @@ int compute_vif_funque(const double* x, const double* y, size_t width, size_t he
             score_den_t += log_values[log_in_den] + (-y - 30) * 2048;
             double td = score_den_t / 2048;
 
-            double num_sum = (double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq);
-            *score_num += (log((double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq)));
-            *score_den += (log((double)1 + var_x[index] / sigma_nsq));
-            int tmpr = 0;
+            // double num_sum = (double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq);
+            double num_int = (double)num_t/(double)(pow(2, 30));
+            // double den_sum = (double)1 + var_x[index] / sigma_nsq;
+            double den_int = (double)den_t/(double)(pow(2, 30));
+            // *score_num += (log((double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq)));
+            // *score_den += (log((double)1 + var_x[index] / sigma_nsq));
+
+            *score_num += (log(num_int) + (double)1e-4);
+            *score_den += (log(den_int) + (double)1e-4);
+            // int tmpr = 0;
         }
     }
     double add_exp = 1e-4*s_height*width;
