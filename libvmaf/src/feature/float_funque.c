@@ -428,7 +428,7 @@ static int extract(VmafFeatureExtractor *fex,
 	err |= vmaf_feature_collector_append(feature_collector, "FUNQUE_feature_adm2_score",
                                 adm_score, index);
 
-    err = compute_ssim_funque(&s->ref_dwt2out, &s->dist_dwt2out, &ssim_score, 1, (funque_dtype)0.01, (funque_dtype)0.03);
+    err = compute_integer_ssim_funque(&s->ref_dwt2out, &s->dist_dwt2out, &ssim_score, 1, (funque_dtype)0.01, (funque_dtype)0.03);
     if (err) return err;
 
     err |= vmaf_feature_collector_append(feature_collector, "FUNQUE_float_ssim",
