@@ -307,6 +307,63 @@ uint64_t largest_int(uint64_t *arr, int n)
     return max;
 }
 
+double compute_old_score(const double *vx,const double *vy,const double *cxy, int s_height, int s_width)
+{
+    double score = 0;
+
+    float sigma1_sq, sigma2_sq, sigma12, g, sv_sq;
+    float num_val, den_val;;
+
+    static const float sigma_nsq = 5/255.0;
+	static const float sigma_max_inv = 4.0 ;
+
+	float accum_num = 0.0;
+	float accum_den = 0.0;
+
+    int index = 0;
+
+    for (unsigned int i = 0; i < s_height; i++)
+    {
+        float accum_inner_num = 0;
+		float accum_inner_den = 0;
+
+        for (unsigned int j = 0; j < s_width; j++)
+        {	
+            index = i * s_width + j;	
+			sigma1_sq = (float)vx[index];
+			sigma2_sq = (float)vy[index];
+			sigma12 = (float)cxy[index];
+
+			if (sigma1_sq < sigma_nsq) {
+				num_val = 1.0 - sigma2_sq * sigma_max_inv;
+				den_val = 1.0;
+			}
+			else {
+				sv_sq = (sigma2_sq + sigma_nsq) * sigma1_sq;
+				if (sigma12 < 0)
+				{
+					num_val = 0.0;
+				}
+				else
+				{
+					g = sv_sq - sigma12 * sigma12;
+					num_val = log2f(sv_sq / g);
+				}
+				den_val = log2f(1.0f + sigma1_sq / sigma_nsq);
+			}
+
+			accum_inner_num += num_val;
+			accum_inner_den += den_val;
+		}
+
+		accum_num += accum_inner_num;
+		accum_den += accum_inner_den;
+	}
+
+    score = accum_num/ accum_den;
+    return score;
+}
+
 int compute_vif_funque(const double* x, const double* y, size_t width, size_t height, double* score, double* score_num, double* score_den, int k, int stride, double sigma_nsq)
 {
     int ret = 1;
@@ -399,6 +456,8 @@ int compute_vif_funque(const double* x, const double* y, size_t width, size_t he
     double score_num_t = (double)0;
     double score_den_t = (double)0;
 
+    double old_score = compute_old_score(var_x, var_y, cov_xy, s_height, s_width);
+
     for (unsigned int i = 0; i < s_height; i++)
     {
         for (unsigned int j = 0; j < s_width; j++)
@@ -475,38 +534,62 @@ int compute_vif_funque(const double* x, const double* y, size_t width, size_t he
             //Q30
             // int64_t exp_add = (1e-4 * (1 << 30));
 
+            //METHOD -1
             //Q30 = Q30+(Q16*Q16*Q30/(Q32 + Q32))
-            int64_t num_t= (1 << 30) +  g_t[index] * g_t[index] * var_x_t[index] / (sv_sq_t[index] + sigma_nsq_t);
-            int64_t tmp_num_t = num_t ;
-            int x;
-            uint16_t log_in_num = get_best_16bitsfixed_opt_64((uint64_t)tmp_num_t, &x);
-            // num_t_temp = log_in * 2^x;  log2f(log_in * 2^x/2^offset) = log2f(log_in) + log2f(2^x) - log2f(2^pffset) = log2f(log_in) + x - offset
-            score_num_t += log_values[log_in_num] + (-x - 30) * 2048;
-            double tn = score_num_t / 2048 ;
+            // int64_t num_t= (1 << 30) +  g_t[index] * g_t[index] * var_x_t[index] / (sv_sq_t[index] + sigma_nsq_t);
+            // int64_t tmp_num_t = num_t;
+            // int x;
+            // uint16_t log_in_num = get_best_16bitsfixed_opt_64((uint64_t)tmp_num_t, &x);
+            // // num_t_temp = log_in * 2^x;  log2f(log_in * 2^x/2^offset) = log2f(log_in) + log2f(2^x) - log2f(2^pffset) = log2f(log_in) + x - offset
+            // score_num_t += log_values[log_in_num] + (-x - 30) * 2048;
+            // double tn = score_num_t / 2048 ;
 
-            //Q30 = Q30+(Q30*Q16*Q16)/Q32
-            int64_t den_t = (1 <<30) + (var_x_t[index] *shift_d * shift_d)/sigma_nsq_t;
-            int64_t tmp_den_t = den_t;
-            int y;
-            uint16_t log_in_den = get_best_16bitsfixed_opt_64((uint64_t)tmp_den_t, &y);
-            score_den_t += log_values[log_in_den] + (-y - 30) * 2048;
-            double td = score_den_t / 2048;
+            // //Q30 = Q30+(Q30*Q16*Q16)/Q32
+            // int64_t den_t = (1 <<30) + (var_x_t[index] *shift_d * shift_d)/sigma_nsq_t;
+            // int64_t tmp_den_t = den_t;
+            // int y;
+            // uint16_t log_in_den = get_best_16bitsfixed_opt_64((uint64_t)tmp_den_t, &y);
+            // score_den_t += log_values[log_in_den] + (-y - 30) * 2048;
+            // double td = score_den_t / 2048;
 
-            // double num_sum = (double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq);
-            double num_int = (double)num_t/(double)(pow(2, 30));
-            // double den_sum = (double)1 + var_x[index] / sigma_nsq;
-            double den_int = (double)den_t/(double)(pow(2, 30));
-            // *score_num += (log((double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq)));
-            // *score_den += (log((double)1 + var_x[index] / sigma_nsq));
+            // METHOD - 2
+            int64_t a = 1 << 30; //Q30
+            int64_t b = g_t[index] * g_t[index] * var_x_t[index]; // Q62 = Q16*Q16*Q30
+            int64_t c = sv_sq_t[index] + sigma_nsq_t; // Q32 = Q32 + Q32
+            //log(ac+b) - log(c)
+            //ac - Q62 = Q30*Q32
+            //b - Q62
+            // ac + b - Q62
+            int x1, x2;
+            int64_t tmp_num_t = (a*c) + b; //Q62 
+            uint16_t log_in_num_1 = get_best_16bitsfixed_opt_64((uint64_t)tmp_num_t, &x1);
+            uint16_t log_in_num_2 = get_best_16bitsfixed_opt_64((uint64_t)c, &x2);
+            score_num_t += (log_values[log_in_num_1] + (-x1 - 62) * 2048) - (log_values[log_in_num_2] + (-x2 - 32) * 2048);
 
-            *score_num += (log(num_int) + (double)1e-4);
-            *score_den += (log(den_int) + (double)1e-4);
+            //log(a + var_x/sigma_nsq)
+            //log((a*sigma_nsq) + var_x) - log(sigma_nsq) 
+            //a*sigma_nsq - Q62 = Q30*Q32
+            int64_t tmp_den_t = ((a*sigma_nsq_t) >> 32) + var_x_t[index]; //Q30   
+            int y1, y2;
+            uint16_t log_in_den_1 = get_best_16bitsfixed_opt_64((uint64_t)tmp_den_t, &y1); 
+            uint16_t log_in_den_2 = get_best_16bitsfixed_opt_64((uint64_t)sigma_nsq_t, &y2); 
+            score_den_t += (log_values[log_in_den_1] + (-y1 - 30) * 2048) - (log_values[log_in_den_2] + (-y2 - 32) * 2048);
+
+            double num_sum = (double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq);
+            // double num_int = (double)num_t/(double)(pow(2, 30));
+            double den_sum = (double)1 + var_x[index] / sigma_nsq;
+            // double den_int = (double)den_t/(double)(pow(2, 30));
+            *score_num += (log((double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq)));
+            *score_den += (log((double)1 + var_x[index] / sigma_nsq));
+
+           
             // int tmpr = 0;
         }
     }
-    double add_exp = 1e-4*s_height*width;
+    double add_exp = 1e-4*s_height*s_width;
     *score += ((*score_num + add_exp) / (*score_den + add_exp));
-    score_t += ((((double)score_num_t) + add_exp)/(((double)score_den_t)+add_exp));
+    // score_t += ((((double)score_num_t/2048) + add_exp)/(((double)score_den_t/2048)+add_exp));
+    score_t += (score_num_t + add_exp) / (score_den_t + add_exp);
 
 
     free(x_pad);
