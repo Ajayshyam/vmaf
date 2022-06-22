@@ -25,7 +25,7 @@
 #endif
 
 #include "mem.h"
-#include "adm_options.h"
+#include "integer_adm_options.h"
 #include "adm_tools.h"
 #include "integer_filters.h"
 #include "integer_adm.h"
@@ -43,8 +43,8 @@
 
 static funque_dtype rcp_s(funque_dtype x)
 {
-    funque_dtype xi = _mm_cvtss_f32(_mm_rcp_ss(_mm_load_ss(&x)));
-    return xi + xi * (1.0f - x * xi);
+  funque_dtype xi = _mm_cvtss_f32(_mm_rcp_ss(_mm_load_ss(&x)));
+  return xi + xi * (1.0f - x * xi);
 }
 
 static inline funque_dtype clip(funque_dtype value, funque_dtype low, funque_dtype high)
@@ -52,8 +52,8 @@ static inline funque_dtype clip(funque_dtype value, funque_dtype low, funque_dty
   return value < low ? low : (value > high ? high : value);
 }
 
-#define DIVS(n, d) ((n) * rcp_s(d))
-#endif //ADM_OPT_RECIP_DIVISION
+#define DIVS(n, d) ((n)*rcp_s(d))
+#endif // ADM_OPT_RECIP_DIVISION
 #else
 #define DIVS(n, d) ((n) / (d))
 #endif // __SSE2__
@@ -131,9 +131,9 @@ void integral_image_adm_sums(funque_dtype *x, int k, int stride, funque_dtype *m
   int x_reflect = (int)((k - stride) / 2);
 
   x_pad = (funque_dtype *)malloc(sizeof(funque_dtype) * (width + (2 * x_reflect)) * (height + (2 * x_reflect)));
-  
+
   reflect_pad_adm(x, width, height, x_reflect, x_pad);
-  
+
   size_t r_width = width + (2 * x_reflect);
   size_t r_height = height + (2 * x_reflect);
 
@@ -145,7 +145,7 @@ void integral_image_adm_sums(funque_dtype *x, int k, int stride, funque_dtype *m
   {
     for (j = 0; j < width; j++)
     {
-      mx[i * width + j] = (int_x[i * (width + 3) + j] - int_x[i * (width+3) + j + k] - int_x[(i + k) * (width+3) + j] + int_x[(i + k) *(width+3) + j + k]);
+      mx[i * width + j] = (int_x[i * (width + 3) + j] - int_x[i * (width + 3) + j + k] - int_x[(i + k) * (width + 3) + j] + int_x[(i + k) * (width + 3) + j + k]);
     }
   }
   free(x_pad);
@@ -154,51 +154,74 @@ void integral_image_adm_sums(funque_dtype *x, int k, int stride, funque_dtype *m
 
 void dlm_decouple(dwt2buffers ref, dwt2buffers dist, dwt2buffers dlm_rest, dwt2buffers dlm_add)
 {
-  funque_dtype eps = 1e-30;
+#ifdef ADM_OPT_AVOID_ATAN
+  const float cos_1deg_sq = cos(1.0 * M_PI / 180.0) * cos(1.0 * M_PI / 180.0);
+#endif
+  float eps = 1e-30;
   size_t width = ref.width;
   size_t height = ref.height;
   int i, j, k, index;
 
-  funque_dtype *psi_ref = (funque_dtype *)calloc(width * height, sizeof(funque_dtype));
-  funque_dtype *psi_dist = (funque_dtype *)calloc(width * height, sizeof(funque_dtype));
-  funque_dtype *psi_diff = (funque_dtype *)calloc(width * height, sizeof(funque_dtype));
-  funque_dtype *var_k;
-  funque_dtype val;
-  funque_dtype tmp_val;
+  float *var_k;
+  float val;
+  float tmp_val;
+  int angle_flag;
+
+#ifdef ADM_OPT_AVOID_ATAN
+  float *ot_dp = (float *)calloc(width * height, sizeof(float));
+  float *o_mag_sq = (float *)calloc(width * height, sizeof(float));
+  float *t_mag_sq = (float *)calloc(width * height, sizeof(float));
+#else
+  float *psi_ref = (float *)calloc(width * height, sizeof(float));
+  float *psi_dist = (float *)calloc(width * height, sizeof(float));
+  float *psi_diff = (float *)calloc(width * height, sizeof(float));
+#endif
 
   for (i = 0; i < height; i++)
   {
     for (j = 0; j < width; j++)
     {
       index = i * width + j;
-#if FUNQUE_DOUBLE_DTYPE
-      psi_ref[index] = atan(ref.bands[2][index] / (ref.bands[1][index] + eps)) + M_PI * ((ref.bands[1][index] <= 0));
-      psi_dist[index] = atan(dist.bands[2][index] / (dist.bands[1][index] + eps)) + M_PI * ((dist.bands[1][index] <= 0));
-      psi_diff[index] = 180 * fabs(psi_ref[index] - psi_dist[index]) / M_PI;
+#ifdef ADM_OPT_AVOID_ATAN
+      ot_dp[index] = (ref.bands[1][index] * dist.bands[1][index]) + (ref.bands[2][index] * dist.bands[2][index]);
+      o_mag_sq[index] = (ref.bands[1][index] * ref.bands[1][index]) + (ref.bands[2][index] * ref.bands[2][index]);
+      t_mag_sq[index] = (dist.bands[1][index] * dist.bands[1][index]) + (dist.bands[2][index] * dist.bands[2][index]);
+      angle_flag = (ot_dp[index] >= 0.0f) && (ot_dp[index] * ot_dp[index] >= cos_1deg_sq * o_mag_sq[index] * t_mag_sq[index]);
+      printf("angle flag with tan = %d\n", angle_flag);
 #else
-      psi_ref[index] = atanf(ref.bands[2][index] / (ref.bands[1][index] + eps)) + M_PI * ((ref.bands[1][index] <= 0)); // ? ref.bands[1][index] : 0);
-      psi_dist[index] = atanf(dist.bands[2][index] / (dist.bands[1][index] + eps)) + M_PI * ((dist.bands[1][index] <= 0)); // ? dist.bands[1][index] : 0);
+      psi_ref[index] = atanf(ref.bands[2][index] / (ref.bands[1][index] + eps)) + M_PI * ((ref.bands[1][index] < 0));
+      psi_dist[index] = atanf(dist.bands[2][index] / (dist.bands[1][index] + eps)) + M_PI * ((dist.bands[1][index] < 0));
       psi_diff[index] = 180 * fabsf(psi_ref[index] - psi_dist[index]) / M_PI;
+      angle_flag = psi_diff[index] < 1;
+      printf("angle flag without tan = %d\n", angle_flag);
+
 #endif
       for (k = 1; k < 4; k++)
       {
         val = clip(dist.bands[k][index] / (ref.bands[k][index] + eps), 0.0, 1.0);
         tmp_val = (val * (ref.bands[k][index]));
 
-        dlm_rest.bands[k][index] = (psi_diff[index] < 1) ? (dist.bands[k][index]) : tmp_val;
+        dlm_rest.bands[k][index] = angle_flag ? (dist.bands[k][index]) : tmp_val;
         dlm_add.bands[k][index] = dist.bands[k][index] - dlm_rest.bands[k][index];
       }
     }
   }
+
+#ifdef ADM_OPT_AVOID_ATAN
+  free(ot_dp);
+  free(o_mag_sq);
+  free(t_mag_sq);
+#else
   free(psi_ref);
   free(psi_dist);
   free(psi_diff);
+#endif
 }
 
 void dlm_contrast_mask_one_way(dwt2buffers pyr_1, dwt2buffers pyr_2, dwt2buffers masked_pyr, size_t width, size_t height)
 {
   int i, k, j, index;
-  funque_dtype val=0;
+  funque_dtype val = 0;
   funque_dtype *masking_signal, *masking_threshold, *integral_sum;
 
   masking_signal = (funque_dtype *)calloc(width * height, sizeof(funque_dtype));
@@ -206,48 +229,42 @@ void dlm_contrast_mask_one_way(dwt2buffers pyr_1, dwt2buffers pyr_2, dwt2buffers
   integral_sum = (funque_dtype *)calloc(width * height, sizeof(funque_dtype));
 
   for (k = 1; k < 4; k++)
+  {
+    // printf("printing masking signal in band %d\n", k);
+    for (i = 0; i < height; i++)
+    {
+      for (j = 0; j < width; j++)
       {
-        // printf("printing masking signal in band %d\n", k);
-		  for (i = 0; i < height; i++)
-			{
-				for (j = 0; j < width; j++)
-				{
-					index = i * width + j;
-					masking_signal[index] = fabsf(pyr_2.bands[k][index]);
-				}
-			}
-		  integral_image_adm_sums(masking_signal, 3, 1, integral_sum, width, height);
-			for (i = 0; i < height; i++)
-			{
-				for (j = 0; j < width; j++)
-				{
-					index = i * width + j;
-					masking_threshold[index] += (integral_sum[index] + masking_signal[index]) / 30;
-				}
-			}
-      }			
-      
-      for (k = 1; k < 4; k++)
-      {
-		  for (i = 0; i < height; i++)
-		  {
-			  for (j = 0; j < width; j++)
-			  {
-				  index = i * width + j;
-				  val = fabsf(pyr_1.bands[k][index]) - masking_threshold[index];
-				  masked_pyr.bands[k][index] = clip(val, 0.0, val);
-			  }
-		  }
+        index = i * width + j;
+        masking_signal[index] = fabsf(pyr_2.bands[k][index]);
       }
-	  free(masking_signal);
-	  free(masking_threshold);
-	  free(integral_sum);
-}
+    }
+    integral_image_adm_sums(masking_signal, 3, 1, integral_sum, width, height);
+    for (i = 0; i < height; i++)
+    {
+      for (j = 0; j < width; j++)
+      {
+        index = i * width + j;
+        masking_threshold[index] += (integral_sum[index] + masking_signal[index]) / 30;
+      }
+    }
+  }
 
-void dlm_contrast_mask(dwt2buffers pyr_1, dwt2buffers pyr_2, dwt2buffers masked_pyr_1, dwt2buffers masked_pyr_2, size_t width, size_t height)
-{
-  dlm_contrast_mask_one_way(pyr_1, pyr_2, masked_pyr_1, width, height);
-  dlm_contrast_mask_one_way(pyr_2, pyr_1, masked_pyr_2, width, height);
+  for (k = 1; k < 4; k++)
+  {
+    for (i = 0; i < height; i++)
+    {
+      for (j = 0; j < width; j++)
+      {
+        index = i * width + j;
+        val = fabsf(pyr_1.bands[k][index]) - masking_threshold[index];
+        masked_pyr.bands[k][index] = clip(val, 0.0, val);
+      }
+    }
+  }
+  free(masking_signal);
+  free(masking_threshold);
+  free(integral_sum);
 }
 
 int compute_adm_funque(dwt2buffers ref, dwt2buffers dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, funque_dtype border_size)
@@ -257,27 +274,23 @@ int compute_adm_funque(dwt2buffers ref, dwt2buffers dist, double *adm_score, dou
   int n_levels = 1;
   int i, j, k, index;
   double num_sum = 0, den_sum = 0, num_band = 0, den_band = 0;
-  dwt2buffers dlm_rest, dlm_add, pyr_rest, pyr_add;
-  dlm_rest.bands[0] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  dlm_rest.bands[1] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  dlm_rest.bands[2] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  dlm_rest.bands[3] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  dlm_add.bands[0] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  dlm_add.bands[1] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  dlm_add.bands[2] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  dlm_add.bands[3] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  pyr_rest.bands[0] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  pyr_rest.bands[1] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  pyr_rest.bands[2] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  pyr_rest.bands[3] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  pyr_add.bands[0] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  pyr_add.bands[1] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  pyr_add.bands[2] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
-  pyr_add.bands[3] = (funque_dtype *)malloc(sizeof(funque_dtype) * height * width);
+  dwt2buffers dlm_rest, dlm_add, pyr_rest;
+  dlm_rest.bands[0] = (float *)malloc(sizeof(float) * height * width);
+  dlm_rest.bands[1] = (float *)malloc(sizeof(float) * height * width);
+  dlm_rest.bands[2] = (float *)malloc(sizeof(float) * height * width);
+  dlm_rest.bands[3] = (float *)malloc(sizeof(float) * height * width);
+  dlm_add.bands[0] = (float *)malloc(sizeof(float) * height * width);
+  dlm_add.bands[1] = (float *)malloc(sizeof(float) * height * width);
+  dlm_add.bands[2] = (float *)malloc(sizeof(float) * height * width);
+  dlm_add.bands[3] = (float *)malloc(sizeof(float) * height * width);
+  pyr_rest.bands[0] = (float *)malloc(sizeof(float) * height * width);
+  pyr_rest.bands[1] = (float *)malloc(sizeof(float) * height * width);
+  pyr_rest.bands[2] = (float *)malloc(sizeof(float) * height * width);
+  pyr_rest.bands[3] = (float *)malloc(sizeof(float) * height * width);
 
   dlm_decouple(ref, dist, dlm_rest, dlm_add);
 
-  dlm_contrast_mask(dlm_rest, dlm_add, pyr_rest, pyr_add, width, height);
+  dlm_contrast_mask_one_way(dlm_rest, dlm_add, pyr_rest, width, height);
 
   int border_h = (border_size * height);
   int border_w = (border_size * width);
@@ -304,16 +317,14 @@ int compute_adm_funque(dwt2buffers ref, dwt2buffers dist, double *adm_score, dou
   *adm_score_num = num_band + 1e-4;
   *adm_score_den = den_band + 1e-4;
   *adm_score = (*adm_score_num) / (*adm_score_den);
-  
-  for(int i=0; i<4; i++)
+
+  for (int i = 0; i < 4; i++)
   {
     free(dlm_rest.bands[i]);
     free(dlm_add.bands[i]);
     free(pyr_rest.bands[i]);
-    free(pyr_add.bands[i]);
   }
-  
+
   int ret = 0;
   return ret;
-
 }
