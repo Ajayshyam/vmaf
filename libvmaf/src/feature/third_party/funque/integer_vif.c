@@ -31,17 +31,17 @@
 #define GET_VARIABLE_NAME(Variable) (#Variable)
 
 //increase storage value to remove calculation to get log value
-uint16_t log_values[65537];
+uint32_t log_values[65537];
 int64_t shift_k = (int64_t)pow(2,15);
 int64_t shift_d = (int64_t)pow(2,16);
 
 //just change the store offset to reduce multiple calculation when getting log value
 void log_generate()
 {
-    int i;
-	for (i = 32767; i < 65536; i++)
+    uint32_t i;
+	for (i = (1 << 31); i < (1 << 32); i++)
     {
-		log_values[i] = (uint16_t)round(log2f((float)i) * 2048);
+		log_values[i] = (uint32_t)round(log2f((float)i) * (1 << 15) * 2048);
     }
 }
 
@@ -87,6 +87,38 @@ FORCE_INLINE inline uint16_t get_best_16bitsfixed_opt_64(uint64_t temp, int *x)
 
     return (uint16_t)temp;
 }
+
+
+FORCE_INLINE inline uint32_t get_best_32bitsfixed_opt_64(uint64_t temp, int *x)
+{
+    int k = __builtin_clzll(temp); // for long
+
+    if (k > 32)  // temp < 2^47
+    {
+        k -= 32;
+        temp = temp << k;
+        *x = k;
+
+    }
+    else if (k < 31)  // temp > 2^48
+    {
+        k = 32 - k;
+        temp = temp >> k;
+        *x = -k;
+    }
+    else
+    {
+        *x = 0;
+        if (temp >> 32)
+        {
+            temp = temp >> 1;
+            *x = -1;
+        }
+    }
+
+    return (uint32_t)temp;
+}
+
 
 //divide get_best_16bitsfixed_opt_64 for more improved performance as for input greater than 16 bit
 FORCE_INLINE inline uint16_t get_best_16bitsfixed_opt_greater_64(uint64_t temp, int *x)
@@ -599,7 +631,7 @@ int compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, const funqu
     int64_t* sv_sq_t = (int64_t*)malloc(sizeof(int64_t) * s_width * s_height);
     // double pending_shifts = shift_val*shift_val; // Q2n
     int64_t exp_t = exp*shift_val*shift_val; // Q32
-    double sigma_nsq_t = sigma_nsq ; //Q32
+    int64_t sigma_nsq_t = sigma_nsq*shift_val*shift_val ; //Q32
 
     double score_t = (double)0;
     double score_num_t = 0;
@@ -752,9 +784,31 @@ int compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, const funqu
             double gd = ((double)g_t_num/((double)shift_val*shift_val))/ ((double)g_den / ((double)shift_val*shift_val));
             double vard = (double)var_x_t[index]/((double)shift_val*shift_val*k_norm);
             double svsqd = (double)sv_sq_t[index]/((double)shift_val*shift_val*k_norm);
+            double score_num_tmp = (log((double)1 + gd*gd * vard / (svsqd + sigma_nsq)));
+            double score_den_tmp = (log((double)1 + vard / sigma_nsq));
 
-            score_num_t += (log((double)1 + gd*gd * vard / (svsqd + sigma_nsq)));
-            score_den_t += (log((double)1 + vard / sigma_nsq));
+            int64_t n1 = (g_t_num * g_t_num * var_x_t[index]/k_norm)/g_den;
+            int64_t n2 = ((g_den*sv_sq_t[index]/k_norm) + g_den*sigma_nsq_t);
+            int64_t num_t = n2 + n1;
+            int64_t num_den_t = n2;
+            double sum_temp_log = log(1+(double)n1/(double)n2);
+            double t1 = log((double)num_t/(double)num_den_t);
+            double t2 = (double)t1/((double)shift_val*shift_val);
+            int x1, x2;
+            uint16_t log_in_num_1 = get_best_32bitsfixed_opt_64((uint64_t)num_t, &x1);
+            uint16_t log_in_num_2 = get_best_32bitsfixed_opt_64((uint64_t)num_den_t, &x2);
+            double sum_tmp_log_2 = log(log_in_num_1 >> x1) - log(log_in_num_2 >> x2);
+            score_num_t += (log_values[log_in_num_1] + (-x1) * 2048 *  (1 << 15))- (log_values[log_in_num_2] + (-x2) * 2048 *  (1 << 15));
+
+            int64_t d1 = sigma_nsq_t + (var_x_t[index]/k_norm);
+            int64_t d2 = sigma_nsq_t;
+            int y1, y2;
+            uint16_t log_in_den_1 = get_best_16bitsfixed_opt_64((uint64_t)d1, &y1);
+            uint16_t log_in_den_2 = get_best_16bitsfixed_opt_64((uint64_t)d2, &y2);
+            score_den_t += log_values[log_in_den_1] + (-y1 - 12) * 2048 - log_values[log_in_den_2] + (-y2 - 12) * 2048;
+
+
+           
 
 
 // 1+((g*g*var_x)/(svsq+sigmansq)) ==log ((svsq+sigmansq)*g_den*g_den) + (g_num*g_num*var_x)) - log((svsq+sigmansq)*g_den*g_den) )
