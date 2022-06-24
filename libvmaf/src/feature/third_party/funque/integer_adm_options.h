@@ -21,6 +21,12 @@
 #ifndef ADM_OPTIONS_H_
 #define ADM_OPTIONS_H_
 
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
 /* Percentage of frame to discard on all 4 sides */
 #define ADM_BORDER_FACTOR (0.1)
 
@@ -43,7 +49,8 @@
 #define DEFAULT_ADM_REF_DISPLAY_HEIGHT (1080)
 
 /* Contrast sensitivity function */
-enum ADM_CSF_MODE {
+enum ADM_CSF_MODE
+{
     ADM_CSF_MODE_WATSON97 = 0,
 };
 
@@ -51,5 +58,20 @@ enum ADM_CSF_MODE {
 #define DEFAULT_ADM_CSF_MODE (ADM_CSF_MODE_WATSON97)
 
 #define DEFAULT_VIF_LEVELS 2
+
+static int32_t div_lookup[65537];
+static const int32_t div_Q_factor = 1073741824; // 2^30
+
+static inline void div_lookup_generator()
+{
+    for (int i = 1; i <= 32768; ++i)
+    {
+        int32_t recip = (int32_t)(div_Q_factor / i);
+        div_lookup[32768 + i] = recip;
+        div_lookup[32768 - i] = 0 - recip;
+    }
+}
+
+#define SHIFT_ADM_DECOUPLE_FINAL 16
 
 #endif /* ADM_OPTIONS_H_ */

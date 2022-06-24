@@ -187,13 +187,11 @@ void dlm_decouple(dwt2buffers ref, dwt2buffers dist, dwt2buffers dlm_rest, dwt2b
       o_mag_sq[index] = (ref.bands[1][index] * ref.bands[1][index]) + (ref.bands[2][index] * ref.bands[2][index]);
       t_mag_sq[index] = (dist.bands[1][index] * dist.bands[1][index]) + (dist.bands[2][index] * dist.bands[2][index]);
       angle_flag = (ot_dp[index] >= 0.0f) && (ot_dp[index] * ot_dp[index] >= cos_1deg_sq * o_mag_sq[index] * t_mag_sq[index]);
-      printf("angle flag with tan = %d\n", angle_flag);
 #else
       psi_ref[index] = atanf(ref.bands[2][index] / (ref.bands[1][index] + eps)) + M_PI * ((ref.bands[1][index] < 0));
       psi_dist[index] = atanf(dist.bands[2][index] / (dist.bands[1][index] + eps)) + M_PI * ((dist.bands[1][index] < 0));
       psi_diff[index] = 180 * fabsf(psi_ref[index] - psi_dist[index]) / M_PI;
       angle_flag = psi_diff[index] < 1;
-      printf("angle flag without tan = %d\n", angle_flag);
 
 #endif
       for (k = 1; k < 4; k++)
@@ -230,7 +228,6 @@ void dlm_contrast_mask_one_way(dwt2buffers pyr_1, dwt2buffers pyr_2, dwt2buffers
 
   for (k = 1; k < 4; k++)
   {
-    // printf("printing masking signal in band %d\n", k);
     for (i = 0; i < height; i++)
     {
       for (j = 0; j < width; j++)
@@ -328,3 +325,178 @@ int compute_adm_funque(dwt2buffers ref, dwt2buffers dist, double *adm_score, dou
   int ret = 0;
   return ret;
 }
+
+void integer_dlm_decouple(i_dwt2buffers ref, i_dwt2buffers dist, i_dwt2buffers i_dlm_rest, i_dwt2buffers i_dlm_add)
+{
+#ifdef ADM_OPT_AVOID_ATAN
+  const float cos_1deg_sq = cos(1.0 * M_PI / 180.0) * cos(1.0 * M_PI / 180.0);
+#endif
+  float eps = 1e-30;
+  size_t width = ref.width;
+  size_t height = ref.height;
+  int i, j, k, index;
+
+  float val;
+  int64_t tmp_val;
+  int angle_flag;
+
+#ifdef ADM_OPT_AVOID_ATAN
+  int64_t *ot_dp = (int64_t *)calloc(width * height, sizeof(int64_t));
+  int64_t *o_mag_sq = (int64_t *)calloc(width * height, sizeof(int64_t));
+  int64_t *t_mag_sq = (int64_t *)calloc(width * height, sizeof(int64_t));
+#else
+  float *psi_ref = (float *)calloc(width * height, sizeof(float));
+  float *psi_dist = (float *)calloc(width * height, sizeof(float));
+  float *psi_diff = (float *)calloc(width * height, sizeof(float));
+#endif
+
+  for (i = 0; i < height; i++)
+  {
+    for (j = 0; j < width; j++)
+    {
+      index = i * width + j;
+#ifdef ADM_OPT_AVOID_ATAN
+      ot_dp[index] = ((int64_t)ref.bands[1][index] * dist.bands[1][index]) + ((int64_t)ref.bands[2][index] * dist.bands[2][index]);
+      o_mag_sq[index] = ((int64_t)ref.bands[1][index] * ref.bands[1][index]) + ((int64_t)ref.bands[2][index] * ref.bands[2][index]);
+      t_mag_sq[index] = ((int64_t)dist.bands[1][index] * dist.bands[1][index]) + ((int64_t)dist.bands[2][index] * dist.bands[2][index]);
+
+      /** angle_flag is calculated in floating-point by converting fixed-point variables back to floating-point  */
+      angle_flag = (((float)ot_dp[index] / 4096.0) >= 0.0f) &&
+                   (((float)ot_dp[index] / 4096.0) * ((float)ot_dp[index] / 4096.0) >=
+                    cos_1deg_sq * ((float)o_mag_sq[index] / 4096.0) * ((float)t_mag_sq[index] / 4096.0));
+#else
+      psi_ref[index] = atanf(ref.bands[2][index] / (ref.bands[1][index] + eps)) + M_PI * ((ref.bands[1][index] < 0));
+      psi_dist[index] = atanf(dist.bands[2][index] / (dist.bands[1][index] + eps)) + M_PI * ((dist.bands[1][index] < 0));
+      psi_diff[index] = 180 * fabsf(psi_ref[index] - psi_dist[index]) / M_PI;
+      angle_flag = psi_diff[index] < 1;
+
+#endif
+      for (k = 1; k < 4; k++)
+      {
+        /**
+         * Division dist/ref is carried using lookup table and converted to multiplication
+         */
+        int64_t tmp_k = (ref.bands[k][index] == 0) ? 32768 : (((int64_t)div_lookup[ref.bands[k][index] + 32768] * dist.bands[k][index]) + 16384) >> 15;
+        int64_t kh = tmp_k < 0 ? 0 : (tmp_k > 32768 ? 32768 : tmp_k);
+        /**
+         * kh is in Q15 type and ref.bands[k][index] is in Q16 type hence shifted by
+         * 15 to make result Q16
+         */
+        tmp_val = ((kh * ref.bands[k][index]) + 16384) >> 15;
+
+        i_dlm_rest.bands[k][index] = angle_flag ? dist.bands[k][index] : tmp_val;
+        i_dlm_add.bands[k][index] = dist.bands[k][index] - i_dlm_rest.bands[k][index];
+      }
+    }
+  }
+
+#ifdef ADM_OPT_AVOID_ATAN
+  free(ot_dp);
+  free(o_mag_sq);
+  free(t_mag_sq);
+#else
+  free(psi_ref);
+  free(psi_dist);
+  free(psi_diff);
+#endif
+}
+
+int compute_integer_adm_funque(i_dwt2buffers i_ref, i_dwt2buffers i_dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, funque_dtype border_size, int bitdepth_pow2)
+{
+  // TODO: assert len(pyr_ref) == len(pyr_dist),'Pyramids must be of equal height.'
+  div_lookup_generator();
+  int n_levels = 1;
+  int i, j, k, index;
+  double num_sum = 0, den_sum = 0, num_band = 0, den_band = 0;
+  dwt2buffers dlm_rest, dlm_add, pyr_rest, ref;
+  i_dwt2buffers i_dlm_rest, i_dlm_add;
+  i_dlm_rest.bands[0] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  i_dlm_rest.bands[1] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  i_dlm_rest.bands[2] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  i_dlm_rest.bands[3] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  i_dlm_add.bands[0] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  i_dlm_add.bands[1] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  i_dlm_add.bands[2] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  i_dlm_add.bands[3] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  dlm_rest.bands[0] = (float *)malloc(sizeof(float) * height * width);
+  dlm_rest.bands[1] = (float *)malloc(sizeof(float) * height * width);
+  dlm_rest.bands[2] = (float *)malloc(sizeof(float) * height * width);
+  dlm_rest.bands[3] = (float *)malloc(sizeof(float) * height * width);
+  dlm_add.bands[0] = (float *)malloc(sizeof(float) * height * width);
+  dlm_add.bands[1] = (float *)malloc(sizeof(float) * height * width);
+  dlm_add.bands[2] = (float *)malloc(sizeof(float) * height * width);
+  dlm_add.bands[3] = (float *)malloc(sizeof(float) * height * width);
+  pyr_rest.bands[0] = (float *)malloc(sizeof(float) * height * width);
+  pyr_rest.bands[1] = (float *)malloc(sizeof(float) * height * width);
+  pyr_rest.bands[2] = (float *)malloc(sizeof(float) * height * width);
+  pyr_rest.bands[3] = (float *)malloc(sizeof(float) * height * width);
+  ref.bands[0] = (float *)malloc(sizeof(float) * height * width);
+  ref.bands[1] = (float *)malloc(sizeof(float) * height * width);
+  ref.bands[2] = (float *)malloc(sizeof(float) * height * width);
+  ref.bands[3] = (float *)malloc(sizeof(float) * height * width);
+
+  integer_dlm_decouple(i_ref, i_dist, i_dlm_rest, i_dlm_add);
+
+  for (int i = 0; i < 4; i++)
+  {
+    fix2float(i_dlm_rest.bands[i], dlm_rest.bands[i], width, height,
+              (2 * SPAT_FILTER_COEFF_SHIFT - SPAT_FILTER_INTER_SHIFT - SPAT_FILTER_OUT_SHIFT + 2 * DWT2_COEFF_UPSHIFT - DWT2_INTER_SHIFT - DWT2_OUT_SHIFT),
+              sizeof(dwt2_dtype));
+    normalize_bitdepth(dlm_rest.bands[i], dlm_rest.bands[i], bitdepth_pow2, sizeof(funque_dtype) * width,
+                       width, height);
+
+    fix2float(i_dlm_add.bands[i], dlm_add.bands[i], width, height,
+              (2 * SPAT_FILTER_COEFF_SHIFT - SPAT_FILTER_INTER_SHIFT - SPAT_FILTER_OUT_SHIFT + 2 * DWT2_COEFF_UPSHIFT - DWT2_INTER_SHIFT - DWT2_OUT_SHIFT),
+              sizeof(dwt2_dtype));
+    normalize_bitdepth(dlm_add.bands[i], dlm_add.bands[i], bitdepth_pow2, sizeof(funque_dtype) * width,
+                       width, height);
+
+    fix2float(i_ref.bands[i], ref.bands[i], width, height,
+              (2 * SPAT_FILTER_COEFF_SHIFT - SPAT_FILTER_INTER_SHIFT - SPAT_FILTER_OUT_SHIFT + 2 * DWT2_COEFF_UPSHIFT - DWT2_INTER_SHIFT - DWT2_OUT_SHIFT),
+              sizeof(dwt2_dtype));
+    normalize_bitdepth(ref.bands[i], ref.bands[i], bitdepth_pow2, sizeof(funque_dtype) * width,
+                       width, height);
+  }
+
+  dlm_contrast_mask_one_way(dlm_rest, dlm_add, pyr_rest, width, height);
+
+  int border_h = (border_size * height);
+  int border_w = (border_size * width);
+  int loop_h = height - border_h;
+  int loop_w = width - border_w;
+
+  for (k = 1; k < 4; k++)
+  {
+    for (i = border_h; i < loop_h; i++)
+    {
+      for (j = border_w; j < loop_w; j++)
+      {
+        index = i * width + j;
+        num_sum += powf(pyr_rest.bands[k][index], 3.0);
+        den_sum += powf(fabsf(ref.bands[k][index]), 3.0);
+      }
+    }
+    den_band += powf(den_sum, 1.0 / 3.0);
+    num_band += powf(num_sum, 1.0 / 3.0);
+    num_sum = 0;
+    den_sum = 0;
+  }
+
+  *adm_score_num = num_band + 1e-4;
+  *adm_score_den = den_band + 1e-4;
+  *adm_score = (*adm_score_num) / (*adm_score_den);
+
+  for (int i = 0; i < 4; i++)
+  {
+    free(dlm_rest.bands[i]);
+    free(dlm_add.bands[i]);
+	free(i_dlm_rest.bands[i]);
+    free(i_dlm_add.bands[i]);
+    free(pyr_rest.bands[i]);
+	free(ref.bands[i]);
+  }
+
+  int ret = 0;
+  return ret;
+}
+
