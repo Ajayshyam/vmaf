@@ -465,8 +465,9 @@ static int extract(VmafFeatureExtractor *fex,
     double ssim_score;
 
     int16_t shift_val = pow(2, 2*SPAT_FILTER_COEFF_SHIFT-SPAT_FILTER_INTER_SHIFT-SPAT_FILTER_OUT_SHIFT+2*DWT2_COEFF_UPSHIFT-DWT2_INTER_SHIFT-DWT2_OUT_SHIFT)*bitdepth_pow2; //2^13.99 
-    int ji = 2*SPAT_FILTER_COEFF_SHIFT-SPAT_FILTER_INTER_SHIFT-SPAT_FILTER_OUT_SHIFT+2*DWT2_COEFF_UPSHIFT-DWT2_INTER_SHIFT-DWT2_OUT_SHIFT;
-     int hjk = 0;
+
+    int16_t shift_val_2 = pow(2, 2*SPAT_FILTER_COEFF_SHIFT-SPAT_FILTER_INTER_SHIFT-SPAT_FILTER_OUT_SHIFT+4*DWT2_COEFF_UPSHIFT-2*DWT2_INTER_SHIFT-2*DWT2_OUT_SHIFT)*bitdepth_pow2; //2^13.99 
+
     err = compute_vif_funque(s->i_ref_dwt2out.bands[0], s->i_dist_dwt2out.bands[0], s->ref_dwt2out.bands[0], s->dist_dwt2out.bands[0], s->ref_dwt2out.width, s->ref_dwt2out.height,&vif_score_0, &vif_score_num_0, &vif_score_den_0, 9, 1, (double)5.0, shift_val);
     if (err) return err;
 
@@ -487,7 +488,7 @@ static int extract(VmafFeatureExtractor *fex,
                         s->dist_dwt2out_vif.width, s->dist_dwt2out_vif.height);        
     }
 
-    err = compute_vif_funque(s->i_ref_dwt2out_vif.bands[0],s->i_dist_dwt2out_vif.bands[0] ,s->ref_dwt2out_vif.bands[0], s->dist_dwt2out_vif.bands[0], s->ref_dwt2out_vif.width, s->ref_dwt2out_vif.height, &vif_score_1, &vif_score_num_1, &vif_score_den_1, 9, 1, (double)5.0, shift_val);
+    err = compute_vif_funque(s->i_ref_dwt2out_vif.bands[0],s->i_dist_dwt2out_vif.bands[0] ,s->ref_dwt2out_vif.bands[0], s->dist_dwt2out_vif.bands[0], s->ref_dwt2out_vif.width, s->ref_dwt2out_vif.height, &vif_score_1, &vif_score_num_1, &vif_score_den_1, 9, 1, (double)5.0, shift_val_2);
     if (err) return err;
 
     err |= vmaf_feature_collector_append_with_dict(feature_collector,
