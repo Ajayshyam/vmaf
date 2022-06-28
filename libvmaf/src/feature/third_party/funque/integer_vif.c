@@ -530,15 +530,15 @@ int compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, const funqu
     int64_t* g_t = (int64_t*)malloc(sizeof(int64_t) * s_width * s_height);
     int64_t* sv_sq_t = (int64_t*)malloc(sizeof(int64_t) * s_width * s_height);
 
-    int64_t exp_t = exp*shift_val*shift_val;
+    int64_t exp_t = 1;//exp*shift_val*shift_val;
     int64_t sigma_nsq_t = sigma_nsq*shift_val*shift_val ;
 
     *score = (double)0;
     *score_num = (double)0;
     *score_den = (double)0;
 
-    int64_t score_num_t = 0;
-    int64_t score_den_t = 0;
+    uint64_t score_num_t = 0;
+    uint64_t score_den_t = 0;
 
     for (unsigned int i = 0; i < s_height; i++)
     {
@@ -596,8 +596,8 @@ int compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, const funqu
                 g_t_num = 0;
             }
 
-            if (sv_sq_t[index] < exp)
-                sv_sq_t[index] = exp;
+            if (sv_sq_t[index] < exp_t)
+                sv_sq_t[index] = exp_t;
 
             // double works till here
             // double gd = ((double)g_t_num/((double)shift_val*shift_val))/ ((double)g_den / ((double)shift_val*shift_val));
