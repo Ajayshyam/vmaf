@@ -26,26 +26,33 @@
 #include "common/macros.h"
 
 #define FLOATING_POINT 0
-
 #define GET_VARIABLE_NAME(Variable) (#Variable)
 
 //increase storage value to remove calculation to get log value
 // uint32_t log_values[65537];
-uint32_t log_values[2147483648 * 2];
+// uint32_t log_values[2147483648 * 2];
 
 //just change the store offset to reduce multiple calculation when getting log value
-void log_generate()
+// void log_generate()
+// {
+//     uint64_t i;
+//     uint64_t start = (unsigned int)pow(2, 31);
+//     uint64_t end = (unsigned int)pow(2, 32);
+//     uint64_t diff = end - start;
+// 	for (i = start; i < end; i++)
+//     // for (i = 32767; i < 65536; i++)
+//     {
+//         // log_values[i] = (uint16_t)round(log2f((float)i) * 2048);
+// 		log_values[i] = (uint32_t)round(log2((double)i) * (1 << 26));
+//     }
+// }
+
+uint32_t log_32(uint32_t input)
 {
-    uint64_t i;
-    uint64_t start = (unsigned int)pow(2, 31);
-    uint64_t end = (unsigned int)pow(2, 32);
-    uint64_t diff = end - start;
-	for (i = start; i < end; i++)
-    // for (i = 32767; i < 65536; i++)
-    {
-        // log_values[i] = (uint16_t)round(log2f((float)i) * 2048);
-		log_values[i] = (uint32_t)round(log2((double)i) * (1 << 26));
-    }
+    
+    uint32_t log_out_1 = (uint32_t)round(log2((double)input) * (1 << 26));
+    return log_out_1;
+            
 }
 
 //divide get_best_16bitsfixed_opt for more improved performance as for input greater than 16 bit
@@ -605,9 +612,13 @@ int compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, const funqu
             // double svsqd = (double)sv_sq_t[index]/((double)shift_val*shift_val*k_norm);
             // double score_num_tmp = (log((double)1 + gd*gd * vard / (svsqd + sigma_nsq)));
             // double score_den_tmp = (log((double)1 + vard / sigma_nsq));
-  
-            int64_t n1 = (g_t_num * g_t_num * var_x_t[index]/k_norm)/g_den;
-            int64_t n2 = ((g_den*sv_sq_t[index]/k_norm) + g_den*sigma_nsq_t);
+
+            //Q32*Q32*Q32/Q32
+            // int64_t gg = g_t_num * g_t_num * var_x_t[index];
+            int64_t p1 = (g_t_num * g_t_num)/g_den;
+            int64_t p2 = (var_x_t[index]/k_norm);
+            int64_t n1 = p1 * p2;
+            int64_t n2 = ((g_den*(sv_sq_t[index]/k_norm)) + g_den*sigma_nsq_t);
             int64_t num_t = n2 + n1;
             int64_t num_den_t = n2;
             int x1, x2;
@@ -616,7 +627,7 @@ int compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, const funqu
             uint32_t log_in_num_1 = get_best_32bitsfixed_opt_64((uint64_t)num_t, &x1);
             uint32_t log_in_num_2 = get_best_32bitsfixed_opt_64((uint64_t)num_den_t, &x2);
 
-            uint64_t temp_numerator = (log_values[log_in_num_1] + (-x1) *  (1 << 26))- (log_values[log_in_num_2] + (-x2) * (1 << 26));
+            uint64_t temp_numerator = (log_32(log_in_num_1) + (-x1) *  (1 << 26))- (log_32(log_in_num_2) + (-x2) * (1 << 26));
             score_num_t += temp_numerator;
 
             int64_t d1 = sigma_nsq_t + (var_x_t[index]/k_norm);
@@ -627,8 +638,13 @@ int compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, const funqu
             uint32_t log_in_den_1 = get_best_32bitsfixed_opt_64((uint64_t)d1, &y1);
             uint32_t log_in_den_2 = get_best_32bitsfixed_opt_64((uint64_t)d2, &y2);
             // score_den_t += log_values[log_in_den_1] + (-y1 - 12) * 2048 - log_values[log_in_den_2] + (-y2 - 12) * 2048;
-            uint64_t temp_denominator =  (log_values[log_in_den_1] + (-y1) * (1 << 26)) - (log_values[log_in_den_2] +(-y2) * (1 << 26));
+            uint64_t temp_denominator =  (log_32(log_in_den_1) + (-y1) * (1 << 26)) - (log_32(log_in_den_2) +(-y2) * (1 << 26));
             score_den_t += temp_denominator;
+
+            // if( i > 220 && j > 330)
+            // {
+            //     printf("\n");
+            // }
 
 #if FLOATING_POINT
             // double num_sum = (double)1 + g[index] * g[index] * var_x[index] / (sv_sq[index] + sigma_nsq);
