@@ -115,6 +115,73 @@ void float_frame_to_csv(float *ptr_frm, int width, int height, char *filename)
     fclose(fptr);
 }
 
+void int16_frame_to_csv(int16_t *ptr_frm, int width, int height, char *filename)
+{
+    FILE *fptr = fopen(filename, "w");
+    fprintf(fptr, ",");
+    for(int idx_w=0; idx_w<width; idx_w++)
+    {
+        fprintf(fptr, "%d,", idx_w);
+    }
+    fprintf(fptr, "\n");
+
+    for(int idx_h=0; idx_h<height; idx_h++)
+    {
+        fprintf(fptr, "%d,", idx_h);
+        for(int idx_w=0; idx_w<width; idx_w++)
+        {
+            fprintf(fptr, "%d,", ptr_frm[idx_h*width+idx_w]);
+        }
+        fprintf(fptr, "\n");
+    }
+    fclose(fptr);
+}
+
+void int32_frame_to_csv(int32_t *ptr_frm, int width, int height, char *filename)
+{
+    FILE *fptr = fopen(filename, "w");
+    fprintf(fptr, ",");
+    for(int idx_w=0; idx_w<width; idx_w++)
+    {
+        fprintf(fptr, "%d,", idx_w);
+    }
+    fprintf(fptr, "\n");
+
+    for(int idx_h=0; idx_h<height; idx_h++)
+    {
+        fprintf(fptr, "%d,", idx_h);
+        for(int idx_w=0; idx_w<width; idx_w++)
+        {
+            fprintf(fptr, "%d,", ptr_frm[idx_h*width+idx_w]);
+        }
+        fprintf(fptr, "\n");
+    }
+    fclose(fptr);
+}
+
+void int64_frame_to_csv(int64_t *ptr_frm, int width, int height, char *filename)
+{
+    FILE *fptr = fopen(filename, "w");
+    fprintf(fptr, ",");
+    for(int idx_w=0; idx_w<width; idx_w++)
+    {
+        fprintf(fptr, "%d,", idx_w);
+    }
+    fprintf(fptr, "\n");
+
+    for(int idx_h=0; idx_h<height; idx_h++)
+    {
+        fprintf(fptr, "%d,", idx_h);
+        for(int idx_w=0; idx_w<width; idx_w++)
+        {
+            fprintf(fptr, "%ld,", ptr_frm[idx_h*width+idx_w]);
+        }
+        fprintf(fptr, "\n");
+    }
+    fclose(fptr);
+}
+
+
 void integer_funque_dwt2(spat_fil_output_dtype *src, i_dwt2buffers *dwt2_dst, ptrdiff_t dst_stride, int width, int height)
 {
     int dst_px_stride = dst_stride / sizeof(dwt2_dtype);

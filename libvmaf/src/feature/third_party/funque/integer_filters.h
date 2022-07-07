@@ -67,6 +67,12 @@ typedef struct i_dwt2buffers {
 
 void float_frame_to_csv(float *ptr_frm, int width, int height, char *filename);
 
+void int16_frame_to_csv(int16_t *ptr_frm, int width, int height, char *filename);
+
+void int32_frame_to_csv(int32_t *ptr_frm, int width, int height, char *filename);
+
+void int64_frame_to_csv(int64_t *ptr_frm, int width, int height, char *filename);
+
 void fix2float(void *fixed_src, funque_dtype *float_dst, int width, int height, int downshift_factor, int fixed_sz);
 
 void spatial_filter(funque_dtype *src, funque_dtype *dst, ptrdiff_t dst_stride, int width, int height);
