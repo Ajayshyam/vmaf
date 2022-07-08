@@ -84,25 +84,33 @@ void integer_reflect_pad_adm(const dwt2_dtype* src, size_t width, size_t height,
 }
 
 //Qn input, Qn output (with overflow, hence stored in Q64)
-void integer_integral_image_adm(const dwt2_dtype* src, size_t width, size_t height, int64_t* sum)
+void integer_integral_image_adm(const dwt2_dtype* src, size_t width, size_t height, int64_t* sum, int kw, int kh)
 {
-    double st1, st2, st3;
-    
-    for (size_t i = 0; i < (height + 1); ++i)
+    int32_t *temp_sum = (int64_t*)calloc((width + 1) * (height + 1), sizeof(int32_t));
+
+    for (size_t i=1; i<(height+1); i++)
     {
-        for (size_t j = 0; j < (width + 1); ++j)
+        for(size_t j=1; j<kw+1; j++)
         {
-            if (i == 0 || j == 0)
-                continue;
-
-            int64_t val = (int64_t)(src[(i - 1) * width + (j - 1)]); //64 to avoid overflow  
-
-            val += (int64_t)(sum[(i - 1) * (width + 1) + j]);
-            val += (int64_t)(sum[i * (width + 1) + j - 1]) - (int64_t)(sum[(i - 1) * (width + 1) + j - 1]);
-            sum[i * (width + 1) + j] = val;
-
+            temp_sum[i*(width+1)+j] = temp_sum[i*(width+1)+j-1] + src[(i - 1) * width + (j - 1)];
+        }
+        for(size_t j=kw+1; j<(width+1); j++)
+        {
+            temp_sum[i*(width+1)+j] = temp_sum[i*(width+1)+j-1] + src[(i - 1) * width + (j - 1)] - src[(i-1)*width+j-kw-1];
         }
     }
+    for (size_t j=1; j<(width+1); j++)
+    {
+        for (size_t i=1; i<kh+1; i++)
+        {
+            sum[i * (width + 1) + j] = temp_sum[i*(width+1)+j] + sum[(i-1) * (width + 1) + j];
+        }
+        for (size_t i=kh+1; i<(height+1); i++)
+        {
+            sum[i * (width + 1) + j] = temp_sum[i*(width+1)+j] + sum[(i-1) * (width + 1) + j] - temp_sum[(i-kh) * (width + 1) + j];
+        }
+    }
+    free(temp_sum);
 }
 
 void integer_integral_image_adm_sums(dwt2_dtype *x, int k, int stride, int64_t *mx, int64_t *masking_threshold_int, int width, int height)
@@ -122,14 +130,15 @@ void integer_integral_image_adm_sums(dwt2_dtype *x, int k, int stride, int64_t *
 
   int_x = (int64_t *)calloc((r_width + 1) * (r_height + 1), sizeof(int64_t));
 
-  integer_integral_image_adm(x_pad, r_width, r_height, int_x);
+  integer_integral_image_adm(x_pad, r_width, r_height, int_x, k, k);
 
   for (i = 0; i < height; i++)
   {
     for (j = 0; j < width; j++)
     {
 	  index = i * width + j;
-      mx[index] = (int_x[i * (width + 3) + j] - int_x[i * (width + 3) + j + k] - int_x[(i + k) * (width + 3) + j] + int_x[(i + k) * (width + 3) + j + k]);
+      // mx[index] = (int_x[i * (width + 3) + j] - int_x[i * (width + 3) + j + k] - int_x[(i + k) * (width + 3) + j] + int_x[(i + k) * (width + 3) + j + k]);
+      mx[index] = int_x[(i + k) * (width + 3) + j + k];
       masking_threshold_int[index] =  (int64_t)x[index] + mx[index];
     }
   }

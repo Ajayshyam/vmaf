@@ -166,19 +166,6 @@ void integer_reflect_pad(const dwt2_dtype* src, size_t width, size_t height, int
 
 void integer_integral_image_2(const dwt2_dtype* src1, const dwt2_dtype* src2, size_t width, size_t height, int64_t* sum, int kw, int kh)
 {
-    // for (size_t i = 0; i < (height + 1); ++i)
-    // {
-    //     for (size_t j = 0; j < (width + 1); ++j)
-    //     {
-    //         if (i == 0 || j == 0)
-    //             continue;
-
-    //         int64_t val = (((int64_t)src1[(i - 1) * width + (j - 1)] * (int64_t)src2[(i - 1) * width + (j - 1)]));
-    //         val += (int64_t)(sum[(i - 1) * (width + 1) + j]);
-    //         val += (int64_t)(sum[i * (width + 1) + j - 1]) - (int64_t)(sum[(i - 1) * (width + 1) + j - 1]);
-    //         sum[i * (width + 1) + j] = val;
-    //     }        
-    // }
     int64_t *temp_sum = (int64_t*)calloc((width + 1) * (height + 1), sizeof(int64_t));
 
     for (size_t i=1; i<(height+1); i++)
@@ -205,8 +192,7 @@ void integer_integral_image_2(const dwt2_dtype* src1, const dwt2_dtype* src2, si
             sum[i * (width + 1) + j] = temp_sum[i*(width+1)+j] + sum[(i-1) * (width + 1) + j] - temp_sum[(i-kh) * (width + 1) + j];
         }
     }
-
-
+    free(temp_sum);
 }
 
 void integer_integral_image(const dwt2_dtype* src, size_t width, size_t height, int64_t* sum, int kw, int kh)
@@ -235,6 +221,7 @@ void integer_integral_image(const dwt2_dtype* src, size_t width, size_t height, 
             sum[i * (width + 1) + j] = temp_sum[i*(width+1)+j] + sum[(i-1) * (width + 1) + j] - temp_sum[(i-kh) * (width + 1) + j];
         }
     }
+    free(temp_sum);
 }
 
 void integer_compute_metrics(const int64_t* int_1_x, const int64_t* int_1_y, const int64_t* int_2_x, const int64_t* int_2_y, const int64_t* int_xy, size_t width, size_t height, size_t kh, size_t kw, double kNorm, int64_t* var_x, int64_t* var_y, int64_t* cov_xy)
