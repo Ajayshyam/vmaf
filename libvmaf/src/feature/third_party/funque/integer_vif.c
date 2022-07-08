@@ -164,38 +164,75 @@ void integer_reflect_pad(const dwt2_dtype* src, size_t width, size_t height, int
     }
 }
 
-void integer_integral_image_2(const dwt2_dtype* src1, const dwt2_dtype* src2, size_t width, size_t height, int64_t* sum)
+void integer_integral_image_2(const dwt2_dtype* src1, const dwt2_dtype* src2, size_t width, size_t height, int64_t* sum, int kw, int kh)
 {
-    for (size_t i = 0; i < (height + 1); ++i)
-    {
-        for (size_t j = 0; j < (width + 1); ++j)
-        {
-            if (i == 0 || j == 0)
-                continue;
+    // for (size_t i = 0; i < (height + 1); ++i)
+    // {
+    //     for (size_t j = 0; j < (width + 1); ++j)
+    //     {
+    //         if (i == 0 || j == 0)
+    //             continue;
 
-            int64_t val = (((int64_t)src1[(i - 1) * width + (j - 1)] * (int64_t)src2[(i - 1) * width + (j - 1)]));
-            val += (int64_t)(sum[(i - 1) * (width + 1) + j]);
-            val += (int64_t)(sum[i * (width + 1) + j - 1]) - (int64_t)(sum[(i - 1) * (width + 1) + j - 1]);
-            sum[i * (width + 1) + j] = val;
+    //         int64_t val = (((int64_t)src1[(i - 1) * width + (j - 1)] * (int64_t)src2[(i - 1) * width + (j - 1)]));
+    //         val += (int64_t)(sum[(i - 1) * (width + 1) + j]);
+    //         val += (int64_t)(sum[i * (width + 1) + j - 1]) - (int64_t)(sum[(i - 1) * (width + 1) + j - 1]);
+    //         sum[i * (width + 1) + j] = val;
+    //     }        
+    // }
+    int64_t *temp_sum = (int64_t*)calloc((width + 1) * (height + 1), sizeof(int64_t));
+
+    for (size_t i=1; i<(height+1); i++)
+    {
+        for(size_t j=1; j<kw+1; j++)
+        {
+            int64_t val = (int64_t) src1[(i - 1) * width + (j - 1)] * src2[(i - 1) * width + (j - 1)];
+            temp_sum[i*(width+1)+j] = temp_sum[i*(width+1)+j-1] + val;
+        }
+        for(size_t j=kw+1; j<(width+1); j++)
+        {
+            int64_t val = (int64_t) src1[(i - 1) * width + (j - 1)] * src2[(i - 1) * width + (j - 1)];
+            temp_sum[i*(width+1)+j] = temp_sum[i*(width+1)+j-1] + val - ((int32_t)src1[(i-1)*width+j-kw-1] * src2[(i-1)*width+j-kw-1]);
+        }
+    }
+    for (size_t j=1; j<(width+1); j++)
+    {
+        for (size_t i=1; i<kh+1; i++)
+        {
+            sum[i * (width + 1) + j] = temp_sum[i*(width+1)+j] + sum[(i-1) * (width + 1) + j];
+        }
+        for (size_t i=kh+1; i<(height+1); i++)
+        {
+            sum[i * (width + 1) + j] = temp_sum[i*(width+1)+j] + sum[(i-1) * (width + 1) + j] - temp_sum[(i-kh) * (width + 1) + j];
         }
     }
 
+
 }
 
-void integer_integral_image(const dwt2_dtype* src, size_t width, size_t height, int64_t* sum)
+void integer_integral_image(const dwt2_dtype* src, size_t width, size_t height, int64_t* sum, int kw, int kh)
 {
-    for (size_t i = 0; i < (height + 1); ++i)
+    int32_t *temp_sum = (int64_t*)calloc((width + 1) * (height + 1), sizeof(int32_t));
+
+    for (size_t i=1; i<(height+1); i++)
     {
-        for (size_t j = 0; j < (width + 1); ++j)
+        for(size_t j=1; j<kw+1; j++)
         {
-            if (i == 0 || j == 0)
-                continue;
-
-            int64_t val = (int64_t)(src[(i - 1) * width + (j - 1)]); //64 to avoid overflow  
-
-            val += (int64_t)(sum[(i - 1) * (width + 1) + j]);
-            val += (int64_t)(sum[i * (width + 1) + j - 1]) - (int64_t)(sum[(i - 1) * (width + 1) + j - 1]);
-            sum[i * (width + 1) + j] = val;
+            temp_sum[i*(width+1)+j] = temp_sum[i*(width+1)+j-1] + src[(i - 1) * width + (j - 1)];
+        }
+        for(size_t j=kw+1; j<(width+1); j++)
+        {
+            temp_sum[i*(width+1)+j] = temp_sum[i*(width+1)+j-1] + src[(i - 1) * width + (j - 1)] - src[(i-1)*width+j-kw-1];
+        }
+    }
+    for (size_t j=1; j<(width+1); j++)
+    {
+        for (size_t i=1; i<kh+1; i++)
+        {
+            sum[i * (width + 1) + j] = temp_sum[i*(width+1)+j] + sum[(i-1) * (width + 1) + j];
+        }
+        for (size_t i=kh+1; i<(height+1); i++)
+        {
+            sum[i * (width + 1) + j] = temp_sum[i*(width+1)+j] + sum[(i-1) * (width + 1) + j] - temp_sum[(i-kh) * (width + 1) + j];
         }
     }
 }
@@ -208,14 +245,12 @@ void integer_compute_metrics(const int64_t* int_1_x, const int64_t* int_1_y, con
     {
         for (size_t j = 0; j < (width - kw); j++)
         {
-            mx = int_1_x[i * width + j] - int_1_x[i * width + j + kw] - int_1_x[(i + kh) * width + j] + int_1_x[(i + kh) * width + j + kw];
-            my = int_1_y[i * width + j] - int_1_y[i * width + j + kw] - int_1_y[(i + kh) * width + j] + int_1_y[(i + kh) * width + j + kw];
+            mx = int_1_x[(i + kh) * width + j + kw];
+            my = int_1_y[(i + kh) * width + j + kw];
 
-            // (1/knorm) pending on all these (vx, vy ,cxy) - do this in next function
-            vx = (int_2_x[i * width + j] - int_2_x[i * width + j + kw] - int_2_x[(i + kh) * width + j] + int_2_x[(i + kh) * width + j + kw]) - ((mx*mx)/kNorm); 
-            vy = (int_2_y[i * width + j] - int_2_y[i * width + j + kw] - int_2_y[(i + kh) * width + j] + int_2_y[(i + kh) * width + j + kw]) - ((my * my)/kNorm);
-            cxy = (int_xy[i * width + j] - int_xy[i * width + j + kw] - int_xy[(i + kh) * width + j] + int_xy[(i + kh) * width + j + kw]) - ((mx * my)/kNorm);
-
+            vx = int_2_x[(i + kh) * width + j + kw] - ((mx*mx)/kNorm);
+            vy = int_2_y[(i + kh) * width + j + kw] - ((my*my)/kNorm);
+            cxy = int_xy[(i + kh) * width + j + kw] - ((mx * my)/kNorm);
             var_x[i * (width - kw) + j] = vx < 0 ? 0 : vx; 
             var_y[i * (width - kw) + j] = vy < 0 ? 0 : vy;
             cov_xy[i * (width - kw) + j] = (vx < 0 || vy < 0) ? 0 : cxy;
@@ -258,11 +293,11 @@ int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, siz
     int_xy_t = (int64_t*)calloc((r_width + 1) * (r_height + 1), sizeof(int64_t));
 
     //Q64
-    integer_integral_image(x_pad_t, r_width, r_height, int_1_x_t); 
-    integer_integral_image(y_pad_t, r_width, r_height, int_1_y_t); 
-    integer_integral_image_2(x_pad_t, x_pad_t, r_width, r_height, int_2_x_t); 
-    integer_integral_image_2(y_pad_t, y_pad_t, r_width, r_height, int_2_y_t); 
-    integer_integral_image_2(x_pad_t, y_pad_t, r_width, r_height, int_xy_t); 
+    integer_integral_image(x_pad_t, r_width, r_height, int_1_x_t, kw, kh); 
+    integer_integral_image(y_pad_t, r_width, r_height, int_1_y_t, kw, kh); 
+    integer_integral_image_2(x_pad_t, x_pad_t, r_width, r_height, int_2_x_t, kw, kh); 
+    integer_integral_image_2(y_pad_t, y_pad_t, r_width, r_height, int_2_y_t, kw, kh); 
+    integer_integral_image_2(x_pad_t, y_pad_t, r_width, r_height, int_xy_t, kw, kh); 
 
     var_x_t = (int64_t*)malloc(sizeof(int64_t) * (r_width + 1 - kw) * (r_height + 1 - kh));
     var_y_t = (int64_t*)malloc(sizeof(int64_t) * (r_width + 1 - kw) * (r_height + 1 - kh));
@@ -325,7 +360,7 @@ int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, siz
             int64_t num_t = n2 + n1;
             int64_t num_den_t = n2;
             int x1, x2;
-  
+
             uint32_t log_in_num_1 = get_best_32bitsfixed_opt_64((uint64_t)num_t, &x1);
             uint32_t log_in_num_2 = get_best_32bitsfixed_opt_64((uint64_t)num_den_t, &x2);
 
