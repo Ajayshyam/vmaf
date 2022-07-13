@@ -104,12 +104,13 @@ void vresize_neon(const int** src, unsigned char* dst, const short* beta, int wi
     int32x4_t d4_q;
     int32x4_t add_1;
     int32x4_t add_delta;
+    int32x4_t shift_right_32x4;
     uint16x4_t shift_right_16x4;
     uint16x8_t shift_right_16x8;
     uint8x8_t dt;
 
     int bits = 22;
-    int SHIFT = bits;
+    int32x4_t SHIFT = vdupq_n_s32(bits);
     int DELTA = (1 << (bits - 1));
     // b1_vq = vdupq_n_s32(beta[0]);
     // b2_vq = vdupq_n_s32(beta[1]);
@@ -135,11 +136,12 @@ void vresize_neon(const int** src, unsigned char* dst, const short* beta, int wi
 
         add_delta = vaddq_s32(add_1, d4_q);
 
-        // shift_right = vshrq_n_s32(add_delta, SHIFT);
+        // shift_right_32x4 = vqrshl_s32(add_delta, SHIFT); // 32x4
         // dt = vminq_s32(shift_right, higher);
         // dt = vmaxq_s32(dt, lower);
 
-        shift_right_16x4 = vqrshrun_n_s32(add_delta, SHIFT); // 16x4
+        shift_right_32x4 = vqrshlq_s32(add_delta, SHIFT); // 32x4
+        shift_right_16x4 = vqmovun_s32(shift_right_32x4); //16x4
         shift_right_16x8 = vcombine_u16(shift_right_16x4, shift_right_16x4); //16x8
         dt = vqmovn_u16(shift_right_16x8); // 8x8
         
@@ -364,7 +366,7 @@ int compare(const unsigned char* _x, const unsigned char* _x_simd, int iwidth, i
             index = i*iwidth+j;
             if(_x[index] != _x_simd[index])
             {
-                printf("mismatch element C: %u, ARM: %u, column: %d, row: %d, index(row*width+col): %d \n", _x[index], _x_simd[index], j, i, index);
+                printf("mismatch element C: %u, ARM: %u, column: %ld, row: %ld, index(row*width+col): %d \n", _x[index], _x_simd[index], j, i, index);
                 count++;
             }
         }
