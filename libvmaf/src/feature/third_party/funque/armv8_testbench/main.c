@@ -4,10 +4,10 @@
 #define PROFILE     0
 #define PRINT_VAL   1
 
-#define WIDTH_MIN   8
-#define WIDTH_MAX   8
-#define HEIGHT_MIN  8
-#define HEIGHT_MAX  8
+#define WIDTH_MIN   4
+#define WIDTH_MAX   32
+#define HEIGHT_MIN  4
+#define HEIGHT_MAX  32
 #define VARIANT "DWT2"
 
 #define MAX_HEIGTH 256
@@ -76,8 +76,8 @@ int main()
     int width, height;
 
 
-    C    = (i_dwt2buffers*) calloc(MAX_WIDTH*MAX_HEIGTH, sizeof(i_dwt2buffers));
-    SIMD = (i_dwt2buffers*) calloc(MAX_WIDTH*MAX_HEIGTH, sizeof(i_dwt2buffers));
+    C    = (i_dwt2buffers*) malloc(sizeof(i_dwt2buffers));
+    SIMD = (i_dwt2buffers*) malloc(sizeof(i_dwt2buffers));
     int16_t *src     = (int16_t*) calloc(MAX_WIDTH*MAX_HEIGTH, sizeof(int16_t));
     C->bands[0]      = (int16_t*) calloc(MAX_WIDTH*MAX_HEIGTH, sizeof(int16_t));
     C->bands[1]      = (int16_t*) calloc(MAX_WIDTH*MAX_HEIGTH, sizeof(int16_t));
@@ -104,7 +104,21 @@ int main()
                 double    time2 = 0;
 
                 integer_funque_dwt2(src + 128, C, dst_stride, width, height);
+                PROFILE_START
+                for (int cnt = 0; cnt < ITERATE; cnt++)
+                {
+                    integer_funque_dwt2(src + 128, C, dst_stride, width, height);
+                }
+                time1=PROFILE_END
+
                 integer_funque_dwt2_neon(src + 128, SIMD, dst_stride, width, height);
+                PROFILE_START
+                for (int cnt = 0; cnt < ITERATE; cnt++)
+                {
+                    integer_funque_dwt2_neon(src + 128, SIMD, dst_stride, width, height);
+                }
+                time2=PROFILE_END
+
                 compare(C, SIMD, dst_stride, width, height);
 
 #if PROFILE
