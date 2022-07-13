@@ -15,7 +15,7 @@
  *     limitations under the License.
  *
  */
-				
+
 int compute_adm_funque(dwt2buffers ref, dwt2buffers dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, funque_dtype border_size);
 
-int compute_integer_adm_funque(i_dwt2buffers ref, i_dwt2buffers dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, funque_dtype border_size);
+int compute_integer_adm_funque(i_dwt2buffers ref, i_dwt2buffers dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, funque_dtype border_size, int16_t shift_val);

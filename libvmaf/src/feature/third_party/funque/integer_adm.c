@@ -41,6 +41,9 @@
 
 #include <emmintrin.h>
 
+#define ADM_CUBE_SHIFT 8
+#define ADM_CUBE_SHIFT_ROUND 128
+
 static funque_dtype rcp_s(funque_dtype x)
 {
     funque_dtype xi = _mm_cvtss_f32(_mm_rcp_ss(_mm_load_ss(&x)));
@@ -58,54 +61,54 @@ static inline funque_dtype clip(funque_dtype value, funque_dtype low, funque_dty
 #define DIVS(n, d) ((n) / (d))
 #endif // __SSE2__
 
-
-void integer_reflect_pad_adm(const dwt2_dtype* src, size_t width, size_t height, int reflect, dwt2_dtype* dest)
+void integer_reflect_pad_adm(const uint16_t *src, size_t width, size_t height, int reflect, uint16_t *dest)
 {
-    size_t out_width = width + 2 * reflect;
-    size_t out_height = height + 2 * reflect;
+  size_t out_width = width + 2 * reflect;
+  size_t out_height = height + 2 * reflect;
 
-    for (size_t i = reflect; i != (out_height - reflect); i++) {
+  for (size_t i = reflect; i != (out_height - reflect); i++)
+  {
 
-        for (int j = 0; j != reflect; j++)
-        {
-            dest[i * out_width + (reflect - 1 - j)] = src[(i - reflect) * width + j + 1];
-        }
-
-        memcpy(&dest[i * out_width + reflect], &src[(i - reflect) * width], sizeof(dwt2_dtype) * width);
-
-        for (int j = 0; j != reflect; j++)
-            dest[i * out_width + out_width - reflect + j] = dest[i * out_width + out_width - reflect - 2 - j];
-    }
-
-    for (int i = 0; i != reflect; i++) {
-        memcpy(&dest[(reflect - 1) * out_width - i * out_width], &dest[reflect * out_width + (i + 1) * out_width], sizeof(dwt2_dtype) * out_width);
-        memcpy(&dest[(out_height - reflect) * out_width + i * out_width], &dest[(out_height - reflect - 1) * out_width - (i + 1) * out_width], sizeof(dwt2_dtype) * out_width);
-    }
-}
-
-//Qn input, Qn output (with overflow, hence stored in Q64)
-void integer_integral_image_adm(const dwt2_dtype* src, size_t width, size_t height, int64_t* sum)
-{
-    double st1, st2, st3;
-    
-    for (size_t i = 0; i < (height + 1); ++i)
+    for (int j = 0; j != reflect; j++)
     {
-        for (size_t j = 0; j < (width + 1); ++j)
-        {
-            if (i == 0 || j == 0)
-                continue;
-
-            int64_t val = (int64_t)(src[(i - 1) * width + (j - 1)]); //64 to avoid overflow  
-
-            val += (int64_t)(sum[(i - 1) * (width + 1) + j]);
-            val += (int64_t)(sum[i * (width + 1) + j - 1]) - (int64_t)(sum[(i - 1) * (width + 1) + j - 1]);
-            sum[i * (width + 1) + j] = val;
-
-        }
+      dest[i * out_width + (reflect - 1 - j)] = src[(i - reflect) * width + j + 1];
     }
+
+    memcpy(&dest[i * out_width + reflect], &src[(i - reflect) * width], sizeof(uint16_t) * width);
+
+    for (int j = 0; j != reflect; j++)
+      dest[i * out_width + out_width - reflect + j] = dest[i * out_width + out_width - reflect - 2 - j];
+  }
+
+  for (int i = 0; i != reflect; i++)
+  {
+    memcpy(&dest[(reflect - 1) * out_width - i * out_width], &dest[reflect * out_width + (i + 1) * out_width], sizeof(uint16_t) * out_width);
+    memcpy(&dest[(out_height - reflect) * out_width + i * out_width], &dest[(out_height - reflect - 1) * out_width - (i + 1) * out_width], sizeof(uint16_t) * out_width);
+  }
 }
 
-void integer_integral_image_adm_sums(dwt2_dtype *x, int k, int stride, int64_t *mx, int64_t *masking_threshold_int, int width, int height)
+// Qn input, Qn output (with overflow, hence stored in Q64)
+void integer_integral_image_adm(const uint16_t *src, size_t width, size_t height, int64_t *sum)
+{
+  double st1, st2, st3;
+
+  for (size_t i = 0; i < (height + 1); ++i)
+  {
+    for (size_t j = 0; j < (width + 1); ++j)
+    {
+      if (i == 0 || j == 0)
+        continue;
+
+      int64_t val = (int64_t)(src[(i - 1) * width + (j - 1)]); // 64 to avoid overflow
+
+      val += (int64_t)(sum[(i - 1) * (width + 1) + j]);
+      val += (int64_t)(sum[i * (width + 1) + j - 1]) - (int64_t)(sum[(i - 1) * (width + 1) + j - 1]);
+      sum[i * (width + 1) + j] = val;
+    }
+  }
+}
+
+void integer_integral_image_adm_sums(uint16_t *x, int k, int stride, int64_t *mx, int64_t *masking_threshold_int, int width, int height)
 {
   dwt2_dtype *x_pad;
   int64_t *int_x;
@@ -113,7 +116,7 @@ void integer_integral_image_adm_sums(dwt2_dtype *x, int k, int stride, int64_t *
 
   int x_reflect = (int)((k - stride) / 2);
 
-  x_pad = (dwt2_dtype *)malloc(sizeof(dwt2_dtype) * (width + (2 * x_reflect)) * (height + (2 * x_reflect)));
+  x_pad = (uint16_t *)malloc(sizeof(uint16_t) * (width + (2 * x_reflect)) * (height + (2 * x_reflect)));
 
   integer_reflect_pad_adm(x, width, height, x_reflect, x_pad);
 
@@ -128,12 +131,12 @@ void integer_integral_image_adm_sums(dwt2_dtype *x, int k, int stride, int64_t *
   {
     for (j = 0; j < width; j++)
     {
-	  index = i * width + j;
+      index = i * width + j;
       mx[index] = (int_x[i * (width + 3) + j] - int_x[i * (width + 3) + j + k] - int_x[(i + k) * (width + 3) + j] + int_x[(i + k) * (width + 3) + j + k]);
-      masking_threshold_int[index] =  (int64_t)x[index] + mx[index];
+      masking_threshold_int[index] = (int64_t)x[index] + mx[index];
     }
   }
-  
+
   free(x_pad);
   free(int_x);
 }
@@ -141,33 +144,24 @@ void integer_integral_image_adm_sums(dwt2_dtype *x, int k, int stride, int64_t *
 void integer_dlm_contrast_mask_one_way(i_dwt2buffers pyr_1, i_dwt2buffers pyr_2, dwt2buffers masked_pyr, size_t width, size_t height)
 {
   int i, k, j, index;
-  int64_t val = 0, pyr_abs;
-  dwt2_dtype *masking_signal;
+  int64_t val = 0;
+  int32_t pyr_abs;
   int64_t *masking_threshold, *masking_threshold_int;
   int64_t *integral_sum;
 
-  masking_signal = (dwt2_dtype *)calloc(width * height, sizeof(dwt2_dtype));
   masking_threshold_int = (int64_t *)calloc(width * height, sizeof(int64_t));
   masking_threshold = (int64_t *)calloc(width * height, sizeof(int64_t));
   integral_sum = (int64_t *)calloc(width * height, sizeof(int64_t));
 
   for (k = 1; k < 4; k++)
   {
+    integer_integral_image_adm_sums(pyr_2.bands[k], 3, 1, integral_sum, masking_threshold_int, width, height);
     for (i = 0; i < height; i++)
     {
       for (j = 0; j < width; j++)
       {
         index = i * width + j;
-        masking_signal[index] = abs(pyr_2.bands[k][index]);
-      }
-    }
-    integer_integral_image_adm_sums(masking_signal, 3, 1, integral_sum, masking_threshold_int, width, height);
-    for (i = 0; i < height; i++)
-    {
-      for (j = 0; j < width; j++)
-      {
-        index = i * width + j;
-		masking_threshold[index] += masking_threshold_int[index];
+        masking_threshold[index] += masking_threshold_int[index];
       }
     }
   }
@@ -179,14 +173,13 @@ void integer_dlm_contrast_mask_one_way(i_dwt2buffers pyr_1, i_dwt2buffers pyr_2,
       for (j = 0; j < width; j++)
       {
         index = i * width + j;
-		//compensation for the division by 30 of masking_threshold
-		pyr_abs = abs((int64_t)pyr_1.bands[k][index]) * 30;
+        // compensation for the division by 30 of masking_threshold
+        pyr_abs = abs((int32_t)pyr_1.bands[k][index]) * 30;
         val = pyr_abs - masking_threshold[index];
         masked_pyr.bands[k][index] = (int64_t)clip(val, 0.0, val);
       }
     }
   }
-  free(masking_signal);
   free(masking_threshold);
   free(masking_threshold_int);
   free(integral_sum);
@@ -251,7 +244,7 @@ void integer_dlm_decouple(i_dwt2buffers ref, i_dwt2buffers dist, i_dwt2buffers i
         tmp_val = ((kh * ref.bands[k][index]) + 16384) >> 15;
 
         i_dlm_rest.bands[k][index] = angle_flag ? dist.bands[k][index] : tmp_val;
-        i_dlm_add.bands[k][index] = dist.bands[k][index] - i_dlm_rest.bands[k][index];
+        i_dlm_add.bands[k][index] = abs(dist.bands[k][index] - i_dlm_rest.bands[k][index]); // to avoid abs in cotrast_mask function
       }
     }
   }
@@ -267,13 +260,15 @@ void integer_dlm_decouple(i_dwt2buffers ref, i_dwt2buffers dist, i_dwt2buffers i
 #endif
 }
 
-int compute_integer_adm_funque(i_dwt2buffers i_ref, i_dwt2buffers i_dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, funque_dtype border_size)
+int compute_integer_adm_funque(i_dwt2buffers i_ref, i_dwt2buffers i_dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, funque_dtype border_size, int16_t shift_val)
 {
   // TODO: assert len(pyr_ref) == len(pyr_dist),'Pyramids must be of equal height.'
   div_lookup_generator();
   int n_levels = 1;
   int i, j, k, index;
-  int64_t num_sum = 0, den_sum = 0, ref_abs; 
+  int64_t num_sum = 0, den_sum = 0;
+  int32_t ref_abs;
+  int64_t num_cube = 0, den_cube = 0;
   double num_band = 0, den_band = 0;
   dwt2buffers dlm_rest, dlm_add, pyr_rest, ref;
   i_dwt2buffers i_dlm_rest, i_dlm_add;
@@ -293,10 +288,10 @@ int compute_integer_adm_funque(i_dwt2buffers i_ref, i_dwt2buffers i_dist, double
   dlm_add.bands[1] = (float *)malloc(sizeof(float) * height * width);
   dlm_add.bands[2] = (float *)malloc(sizeof(float) * height * width);
   dlm_add.bands[3] = (float *)malloc(sizeof(float) * height * width);
-  pyr_rest.bands[0] = (int64_t *)malloc(sizeof(int64_t) * height * width);
-  pyr_rest.bands[1] = (int64_t *)malloc(sizeof(int64_t) * height * width);
-  pyr_rest.bands[2] = (int64_t *)malloc(sizeof(int64_t) * height * width);
-  pyr_rest.bands[3] = (int64_t *)malloc(sizeof(int64_t) * height * width);
+  pyr_rest.bands[0] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  pyr_rest.bands[1] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  pyr_rest.bands[2] = (int32_t *)malloc(sizeof(int32_t) * height * width);
+  pyr_rest.bands[3] = (int32_t *)malloc(sizeof(int32_t) * height * width);
   ref.bands[0] = (float *)malloc(sizeof(float) * height * width);
   ref.bands[1] = (float *)malloc(sizeof(float) * height * width);
   ref.bands[2] = (float *)malloc(sizeof(float) * height * width);
@@ -310,7 +305,7 @@ int compute_integer_adm_funque(i_dwt2buffers i_ref, i_dwt2buffers i_dist, double
   int border_w = (border_size * width);
   int loop_h = height - border_h;
   int loop_w = width - border_w;
-  double row_num[loop_h], row_den[loop_h], accum_num = 0, accum_den = 0;
+  double row_num, row_den, accum_num = 0, accum_den = 0;
 
   for (k = 1; k < 4; k++)
   {
@@ -319,15 +314,19 @@ int compute_integer_adm_funque(i_dwt2buffers i_ref, i_dwt2buffers i_dist, double
       for (j = border_w; j < loop_w; j++)
       {
         index = i * width + j;
-        num_sum += pyr_rest.bands[k][index] * pyr_rest.bands[k][index] * pyr_rest.bands[k][index];
-		//compensation for the division by thirty in the numerator
-		ref_abs = abs((int64_t)i_ref.bands[k][index]) * 30;
-        den_sum += ref_abs * ref_abs * ref_abs;
+        // num_sum += (int64_t)pyr_rest.bands[k][index] * pyr_rest.bands[k][index] * pyr_rest.bands[k][index];
+        num_cube = (int64_t)pyr_rest.bands[k][index] * pyr_rest.bands[k][index] * pyr_rest.bands[k][index];
+        num_sum += ((num_cube + ADM_CUBE_SHIFT_ROUND) >> ADM_CUBE_SHIFT); // reducing precision from 71 to 63
+        //    compensation for the division by thirty in the numerator
+        ref_abs = abs((int64_t)i_ref.bands[k][index]) * 30;
+        den_cube = (int64_t)ref_abs * ref_abs * ref_abs;
+        // den_sum += (int64_t)ref_abs * ref_abs * ref_abs;
+        den_sum += ((den_cube + ADM_CUBE_SHIFT_ROUND) >> ADM_CUBE_SHIFT);
       }
-      row_num[i] = num_sum / 16320;
-      row_den[i] = den_sum / 16320;
-      accum_num += row_num[i];
-      accum_den += row_den[i];
+      row_num = (double)num_sum ;
+      row_den = (double)den_sum ;
+      accum_num += row_num;
+      accum_den += row_den;
       num_sum = 0;
       den_sum = 0;
     }
