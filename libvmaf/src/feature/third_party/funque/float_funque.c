@@ -487,7 +487,6 @@ static int extract(VmafFeatureExtractor *fex,
     #if PROFILE_IND_MODULES
     gettimeofday(&vif_end_time, NULL);
 #endif
-=======
 
 
 #if PROFILE_FUNQUE
