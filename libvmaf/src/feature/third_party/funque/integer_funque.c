@@ -37,6 +37,7 @@
 #include "integer_funque_ssim.h"
 #include "resizer.h"
 
+#include "funque_profiler.h"
 typedef struct IntFunqueState
 {
     size_t float_stride;
@@ -316,6 +317,17 @@ static int extract(VmafFeatureExtractor *fex,
                    VmafPicture *dist_pic, VmafPicture *dist_pic_90,
                    unsigned index, VmafFeatureCollector *feature_collector)
 {
+#if PROFILE_FUNQUE
+    struct timeval start_time, end_time;
+    struct timeval resize_start_time, resize_end_time;
+    struct timeval prefil_start_time, prefil_end_time;
+    struct timeval motion_start_time, motion_end_time;
+    struct timeval vif_start_time, vif_end_time;
+    struct timeval adm_start_time, adm_end_time;
+    struct timeval ssim_start_time, ssim_end_time;
+    // start timer.
+    gettimeofday(&start_time, NULL);
+#endif
     IntFunqueState *s = fex->priv;
     int err = 0;
 
@@ -324,7 +336,9 @@ static int extract(VmafFeatureExtractor *fex,
 
     VmafPicture *res_ref_pic = &s->res_ref_pic;
     VmafPicture *res_dist_pic = &s->res_dist_pic;
-
+#if PROFILE_IND_MODULES
+    gettimeofday(&resize_start_time, NULL);
+#endif
     if (s->enable_resize)
     {
         res_ref_pic->bpc = ref_pic->bpc;
@@ -349,7 +363,10 @@ static int extract(VmafFeatureExtractor *fex,
         res_ref_pic = ref_pic;
         res_dist_pic = dist_pic;
     }
-
+#if PROFILE_IND_MODULES
+    gettimeofday(&resize_end_time, NULL);
+    prefil_start_time = resize_end_time;
+#endif
     // TODO: Move to lookup table for optimization
     int bitdepth_pow2 = (int)pow(2, res_ref_pic->bpc) - 1;
 
@@ -361,6 +378,11 @@ static int extract(VmafFeatureExtractor *fex,
     int16_t spatfilter_shifts = 2 * SPAT_FILTER_COEFF_SHIFT - SPAT_FILTER_INTER_SHIFT - SPAT_FILTER_OUT_SHIFT;
     int16_t dwt_shifts = 2 * DWT2_COEFF_UPSHIFT - DWT2_INTER_SHIFT - DWT2_OUT_SHIFT;
     float pending_div_factor = (1 << ( spatfilter_shifts + dwt_shifts)) * bitdepth_pow2;
+
+#if PROFILE_IND_MODULES
+    gettimeofday(&prefil_end_time, NULL);
+    motion_start_time = prefil_end_time;
+#endif
 
     if (index == 0)
     {
@@ -391,6 +413,11 @@ static int extract(VmafFeatureExtractor *fex,
             return err;
     }
 
+#if PROFILE_IND_MODULES
+    gettimeofday(&motion_end_time, NULL);
+    adm_start_time = motion_end_time;
+#endif
+
     double adm_score, adm_score_num, adm_score_den;
     double ssim_score;
 
@@ -400,11 +427,21 @@ static int extract(VmafFeatureExtractor *fex,
     err |= vmaf_feature_collector_append(feature_collector, "FUNQUE_integer_feature_adm2_score",
                                          adm_score, index);
 
+#if PROFILE_IND_MODULES
+    gettimeofday(&adm_end_time, NULL);
+    ssim_start_time = adm_end_time;
+#endif
+
     err = integer_compute_ssim_funque(&s->i_ref_dwt2out, &s->i_dist_dwt2out, &ssim_score, 1, 0.01, 0.03,
                                       pow(2, 2 * SPAT_FILTER_COEFF_SHIFT - SPAT_FILTER_INTER_SHIFT - SPAT_FILTER_OUT_SHIFT + 2 * DWT2_COEFF_UPSHIFT - DWT2_INTER_SHIFT - DWT2_OUT_SHIFT) * bitdepth_pow2);
 
     err |= vmaf_feature_collector_append(feature_collector, "FUNQUE_integer_feature_ssim",
                                          ssim_score, index);
+
+#if PROFILE_IND_MODULES
+    gettimeofday(&ssim_end_time, NULL);
+    vif_start_time = ssim_end_time;
+#endif
 
     double vif_score[MAX_VIF_LEVELS], vif_score_num[MAX_VIF_LEVELS], vif_score_den[MAX_VIF_LEVELS];
 
@@ -453,6 +490,44 @@ static int extract(VmafFeatureExtractor *fex,
             vif_score[3], index);
         }
     }
+#if PROFILE_IND_MODULES
+    gettimeofday(&vif_end_time, NULL);
+#endif
+
+#if PROFILE_FUNQUE
+    gettimeofday(&end_time, NULL);
+    double time_taken;
+    time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+    time_taken = (time_taken + (end_time.tv_usec - 
+                              start_time.tv_usec)) * 1e-6;
+    if(index==0)
+    {
+        printf("frame_num,time_taken");
+#if PROFILE_IND_MODULES
+        printf(",resize,pre_filters,motion,vif,adm,ssim");
+#endif
+        printf("\n");
+    }
+    printf("%d,%f", (index+1), time_taken);
+#if PROFILE_IND_MODULES
+    double resize_time, pictcopy_time, pre_filt_time, motion_time, vif_time, adm_time, ssim_time;
+    resize_time   = ((resize_end_time.tv_sec - resize_start_time.tv_sec) * 1e6 +
+                    (resize_end_time.tv_usec - resize_start_time.tv_usec)) * 1e-6;
+    pre_filt_time = ((prefil_end_time.tv_sec - prefil_start_time.tv_sec) * 1e6 +
+                    (prefil_end_time.tv_usec - prefil_start_time.tv_usec)) * 1e-6;
+    motion_time   = ((motion_end_time.tv_sec - motion_start_time.tv_sec) * 1e6 +
+                    (motion_end_time.tv_usec - motion_start_time.tv_usec)) * 1e-6;
+    vif_time      = ((vif_end_time.tv_sec - vif_start_time.tv_sec) * 1e6 +
+                    (vif_end_time.tv_usec - vif_start_time.tv_usec)) * 1e-6;
+    adm_time      = ((adm_end_time.tv_sec - adm_start_time.tv_sec) * 1e6 +
+                    (adm_end_time.tv_usec - adm_start_time.tv_usec)) * 1e-6;
+    ssim_time     = ((ssim_end_time.tv_sec - ssim_start_time.tv_sec) * 1e6 +
+                    (ssim_end_time.tv_usec - ssim_start_time.tv_usec)) * 1e-6;
+
+    printf(",%f,%f,%f,%f,%f,%f,%f", resize_time, pictcopy_time, pre_filt_time, motion_time, vif_time, adm_time, ssim_time);
+#endif
+    printf("\n");
+#endif
 
     return err;
 }

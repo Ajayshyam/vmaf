@@ -484,7 +484,7 @@ static int extract(VmafFeatureExtractor *fex,
             vif_score[3], index);
         }
     }
-    #if PROFILE_IND_MODULES
+#if PROFILE_IND_MODULES
     gettimeofday(&vif_end_time, NULL);
 #endif
 
