@@ -510,7 +510,7 @@ static int extract(VmafFeatureExtractor *fex,
     }
     printf("%d,%f", (index+1), time_taken);
 #if PROFILE_IND_MODULES
-    double resize_time, pictcopy_time, pre_filt_time, motion_time, vif_time, adm_time, ssim_time;
+    double resize_time, pre_filt_time, motion_time, vif_time, adm_time, ssim_time;
     resize_time   = ((resize_end_time.tv_sec - resize_start_time.tv_sec) * 1e6 +
                     (resize_end_time.tv_usec - resize_start_time.tv_usec)) * 1e-6;
     pre_filt_time = ((prefil_end_time.tv_sec - prefil_start_time.tv_sec) * 1e6 +
@@ -524,7 +524,7 @@ static int extract(VmafFeatureExtractor *fex,
     ssim_time     = ((ssim_end_time.tv_sec - ssim_start_time.tv_sec) * 1e6 +
                     (ssim_end_time.tv_usec - ssim_start_time.tv_usec)) * 1e-6;
 
-    printf(",%f,%f,%f,%f,%f,%f,%f", resize_time, pictcopy_time, pre_filt_time, motion_time, vif_time, adm_time, ssim_time);
+    printf(",%f,%f,%f,%f,%f,%f", resize_time, pre_filt_time, motion_time, vif_time, adm_time, ssim_time);
 #endif
     printf("\n");
 #endif
