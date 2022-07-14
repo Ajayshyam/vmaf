@@ -37,6 +37,7 @@
 #endif
 #endif
 
+#include "funque_profiler.h"
 typedef struct MotionState {
     VmafPicture tmp;
     VmafPicture blur[3];
@@ -346,6 +347,12 @@ static int extract(VmafFeatureExtractor *fex,
                    VmafPicture *dist_pic, VmafPicture *dist_pic_90,
                    unsigned index, VmafFeatureCollector *feature_collector)
 {
+#if PROFILE_FUNQUE
+    struct timeval start_time, end_time;
+    // start timer.
+    gettimeofday(&start_time, NULL);
+#endif
+
     MotionState *s = fex->priv;
     int err = 0;
 
@@ -378,6 +385,15 @@ static int extract(VmafFeatureExtractor *fex,
                                                  "VMAF_integer_feature_motion_score",
                                                  0., index);
         }
+#if PROFILE_FUNQUE
+        gettimeofday(&end_time, NULL);
+        double time_taken;
+        time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+        time_taken = (time_taken + (end_time.tv_usec - 
+                                start_time.tv_usec)) * 1e-6;
+
+        printf("%f,", time_taken);
+#endif
         return err;
     }
 
@@ -394,7 +410,18 @@ static int extract(VmafFeatureExtractor *fex,
     if (err) return err;
 
     if (index == 1)
+    {
+#if PROFILE_FUNQUE
+        gettimeofday(&end_time, NULL);
+        double time_taken;
+        time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+        time_taken = (time_taken + (end_time.tv_usec - 
+                                start_time.tv_usec)) * 1e-6;
+
+        printf("%f,", time_taken);
+#endif
         return 0;
+    }
 
     uint64_t sad2;
     s->sad(&s->blur[blur_idx_2], &s->blur[blur_idx_1], &sad2);
@@ -404,6 +431,15 @@ static int extract(VmafFeatureExtractor *fex,
     err = vmaf_feature_collector_append(feature_collector,
                                         "VMAF_integer_feature_motion2_score",
                                         score2, index - 1);
+#if PROFILE_FUNQUE
+        gettimeofday(&end_time, NULL);
+        double time_taken;
+        time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+        time_taken = (time_taken + (end_time.tv_usec - 
+                                start_time.tv_usec)) * 1e-6;
+
+        printf("%f,", time_taken);
+#endif
     return err;
 }
 

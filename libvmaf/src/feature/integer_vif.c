@@ -39,6 +39,8 @@
 #endif
 #endif
 
+#include "funque_profiler.h"
+
 typedef struct VifState {
     VifPublicState public;
     bool debug;
@@ -759,6 +761,11 @@ static int extract(VmafFeatureExtractor *fex,
                    VmafPicture *dist_pic, VmafPicture *dist_pic_90,
                    unsigned index, VmafFeatureCollector *feature_collector)
 {
+#if PROFILE_FUNQUE
+    struct timeval start_time, end_time;
+    // start timer.
+    gettimeofday(&start_time, NULL);
+#endif
     VifState *s = fex->priv;
 
     (void)ref_pic_90;
@@ -801,7 +808,15 @@ static int extract(VmafFeatureExtractor *fex,
         }
 
     }
+#if PROFILE_FUNQUE
+    gettimeofday(&end_time, NULL);
+    double time_taken;
+    time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+    time_taken = (time_taken + (end_time.tv_usec - 
+                            start_time.tv_usec)) * 1e-6;
 
+    printf("%f\n", time_taken);
+#endif
     return write_scores(feature_collector, index, vif_score, s);
 }
 

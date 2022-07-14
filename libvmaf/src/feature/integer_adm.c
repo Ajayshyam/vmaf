@@ -27,6 +27,8 @@
 #include "x86/adm_avx2.h"
 #endif
 
+#include "funque_profiler.h"
+
 typedef struct AdmState {
     size_t integer_stride;
     AdmBuffer buf;
@@ -2646,6 +2648,12 @@ static int extract(VmafFeatureExtractor *fex,
                    VmafPicture *dist_pic, VmafPicture *dist_pic_90,
                    unsigned index, VmafFeatureCollector *feature_collector)
 {
+#if PROFILE_FUNQUE
+    struct timeval start_time, end_time;
+    // start timer.
+    gettimeofday(&start_time, NULL);
+#endif
+
     AdmState *s = fex->priv;
     int err = 0;
 
@@ -2686,6 +2694,20 @@ static int extract(VmafFeatureExtractor *fex,
     err |= vmaf_feature_collector_append_with_dict(feature_collector,
             s->feature_name_dict, "integer_adm_scale3", scores[6] / scores[7],
             index);
+
+#if PROFILE_FUNQUE
+    gettimeofday(&end_time, NULL);
+    double time_taken;
+    time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+    time_taken = (time_taken + (end_time.tv_usec - 
+                              start_time.tv_usec)) * 1e-6;
+
+    if(index==0)
+    {
+        printf("frame_num,adm,motion,vif\n");
+    }
+    printf("%d,%f,",(index+1), (time_taken));
+#endif
 
     if (!s->debug) return err;
 
