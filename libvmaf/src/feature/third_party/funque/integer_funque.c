@@ -320,11 +320,13 @@ static int extract(VmafFeatureExtractor *fex,
 #if PROFILE_FUNQUE
     struct timeval start_time, end_time;
     struct timeval resize_start_time, resize_end_time;
+    struct timeval spat_start_time, spat_end_time; 
     struct timeval prefil_start_time, prefil_end_time;
     struct timeval motion_start_time, motion_end_time;
     struct timeval vif_start_time, vif_end_time;
     struct timeval adm_start_time, adm_end_time;
     struct timeval ssim_start_time, ssim_end_time;
+    double spat_time = 0;
     // start timer.
     gettimeofday(&start_time, NULL);
 #endif
@@ -369,10 +371,25 @@ static int extract(VmafFeatureExtractor *fex,
 #endif
     // TODO: Move to lookup table for optimization
     int bitdepth_pow2 = (int)pow(2, res_ref_pic->bpc) - 1;
-
+#if PROFILE_IND_MODULES
+    gettimeofday(&spat_start_time, NULL);
+#endif
     integer_spatial_filter(res_ref_pic->data[0], s->spat_filter, res_ref_pic->w[0], res_ref_pic->h[0]);
+#if PROFILE_IND_MODULES
+    gettimeofday(&spat_end_time, NULL);
+    spat_time += ((spat_end_time.tv_sec - spat_start_time.tv_sec) * 1e6 +
+                  (spat_end_time.tv_usec - spat_start_time.tv_usec)) * 1e-6;
+#endif
     integer_funque_dwt2(s->spat_filter, &s->i_ref_dwt2out, s->i_dwt2_stride, res_ref_pic->w[0], res_ref_pic->h[0]);
+#if PROFILE_IND_MODULES
+    gettimeofday(&spat_start_time, NULL);
+#endif
     integer_spatial_filter(res_dist_pic->data[0], s->spat_filter, res_dist_pic->w[0], res_dist_pic->h[0]);
+#if PROFILE_IND_MODULES
+    gettimeofday(&spat_end_time, NULL);
+    spat_time += ((spat_end_time.tv_sec - spat_start_time.tv_sec) * 1e6 +
+                  (spat_end_time.tv_usec - spat_start_time.tv_usec)) * 1e-6;
+#endif
     integer_funque_dwt2(s->spat_filter, &s->i_dist_dwt2out, s->i_dwt2_stride, res_dist_pic->w[0], res_dist_pic->h[0]);
 
     int16_t spatfilter_shifts = 2 * SPAT_FILTER_COEFF_SHIFT - SPAT_FILTER_INTER_SHIFT - SPAT_FILTER_OUT_SHIFT;
@@ -504,7 +521,7 @@ static int extract(VmafFeatureExtractor *fex,
     {
         printf("frame_num,time_taken");
 #if PROFILE_IND_MODULES
-        printf(",resize,pre_filters,motion,vif,adm,ssim");
+        printf(",resize,pre_filters,spatial_filter,motion,vif,adm,ssim");
 #endif
         printf("\n");
     }
@@ -524,7 +541,7 @@ static int extract(VmafFeatureExtractor *fex,
     ssim_time     = ((ssim_end_time.tv_sec - ssim_start_time.tv_sec) * 1e6 +
                     (ssim_end_time.tv_usec - ssim_start_time.tv_usec)) * 1e-6;
 
-    printf(",%f,%f,%f,%f,%f,%f", resize_time, pre_filt_time, motion_time, vif_time, adm_time, ssim_time);
+    printf(",%f,%f,%f,%f,%f,%f,%f", resize_time, pre_filt_time, spat_time, motion_time, vif_time, adm_time, ssim_time);
 #endif
     printf("\n");
 #endif
