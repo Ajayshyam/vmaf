@@ -89,6 +89,14 @@ unsigned char castOp(int val)
     return CLIP3((val + DELTA) >> SHIFT, 0, 255);
 }
 
+int castOp2(int val)
+{
+    int bits = 22;
+    int SHIFT = bits;
+    int DELTA = (1 << (bits - 1));
+    return val+DELTA >> SHIFT;
+}
+
 void vresize(const int** src, unsigned char* dst, const short* beta, int width)
 {
     int b0 = beta[0], b1 = beta[1], b2 = beta[2], b3 = beta[3];
@@ -100,6 +108,8 @@ void vresize(const int** src, unsigned char* dst, const short* beta, int width)
 
 void vresize_neon(const int** src, unsigned char* dst, const short* beta, int width)
 {
+    int b0 = beta[0], b1 = beta[1], b2 = beta[2], b3 = beta[3];
+    const int* S0 = src[0], * S1 = src[1], * S2 = src[2], * S3 = src[3];
     int32x4_t src_1, src_2, src_3, src_4, src_1_mul;
     int32x4_t d4_q;
     int32x4_t add_1;
@@ -107,10 +117,11 @@ void vresize_neon(const int** src, unsigned char* dst, const short* beta, int wi
     int32x4_t shift_right_32x4;
     uint16x4_t shift_right_16x4;
     uint16x8_t shift_right_16x8;
-    uint8x8_t dt;
+    int32x4_t dt;
+    uint8x8_t dt2;
 
     int bits = 22;
-    int32x4_t SHIFT = vdupq_n_s32(bits);
+    // int32x4_t SHIFT = vdupq_n_s32(bits);
     int DELTA = (1 << (bits - 1));
     // b1_vq = vdupq_n_s32(beta[0]);
     // b2_vq = vdupq_n_s32(beta[1]);
@@ -119,8 +130,8 @@ void vresize_neon(const int** src, unsigned char* dst, const short* beta, int wi
     d4_q = vdupq_n_s32(DELTA);
     src_1_mul = vdupq_n_s32(0);
 
-    // int32x4_t lower  = vdupq_n_s32(0);
-    // int32x4_t higher = vdupq_n_s32(255);
+    int32x4_t lower  = vdupq_n_s32(0);
+    int32x4_t higher = vdupq_n_s32(255);
 
     for (int x = 0; x < width; x+=4)
     {
@@ -132,20 +143,21 @@ void vresize_neon(const int** src, unsigned char* dst, const short* beta, int wi
         add_1 = vmlaq_n_s32(src_1_mul, src_1, beta[0]);
         add_1 = vmlaq_n_s32(add_1, src_2, beta[1]);
         add_1 = vmlaq_n_s32(add_1, src_3, beta[2]);
-        add_1 = vmlaq_n_s32(add_1, src_3, beta[3]);
+        add_1 = vmlaq_n_s32(add_1, src_4, beta[3]);
 
         add_delta = vaddq_s32(add_1, d4_q);
 
-        // shift_right_32x4 = vqrshl_s32(add_delta, SHIFT); // 32x4
-        // dt = vminq_s32(shift_right, higher);
-        // dt = vmaxq_s32(dt, lower);
+        shift_right_32x4 = vshrq_n_s32(add_delta, bits); // 32x4
 
-        shift_right_32x4 = vqrshlq_s32(add_delta, SHIFT); // 32x4
-        shift_right_16x4 = vqmovun_s32(shift_right_32x4); //16x4
+        dt = vminq_s32(shift_right_32x4, higher);
+        dt = vmaxq_s32(dt, lower);
+
+        // shift_right_32x4 = vshrq_n_s32(add_delta, bits); // 32x4
+        shift_right_16x4 = vqmovun_s32(dt); //16x4
         shift_right_16x8 = vcombine_u16(shift_right_16x4, shift_right_16x4); //16x8
-        dt = vqmovn_u16(shift_right_16x8); // 8x8
+        dt2 = vqmovn_u16(shift_right_16x8); // 8x8
         
-        vst1_lane_u32((unsigned int*)(dst+x), vreinterpret_u32_u8(dt), 0);
+        vst1_lane_u32((unsigned int*)(dst+x), vreinterpret_u32_u8(dt2), 0);
     }
 }
 
