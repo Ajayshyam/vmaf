@@ -541,7 +541,7 @@ int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, siz
     // uint32_t* sv_sq_t = (uint32_t*)malloc(sizeof(uint32_t) * s_width * s_height);
     uint32_t sv_sq_t;
     int64_t exp_t = 1;//exp*shift_val*shift_val; // using 1 because exp in Q32 format is still 0
-    uint32_t sigma_nsq_t = (int32_t)(sigma_nsq*shift_val*shift_val) >> VIF_COMPUTE_METRIC_R_SHIFT ;
+    uint32_t sigma_nsq_t = (int64_t)((int64_t)sigma_nsq*shift_val*shift_val*k_norm) >> VIF_COMPUTE_METRIC_R_SHIFT ;
 
     *score = (double)0;
     *score_num = (double)0;
@@ -573,27 +573,28 @@ int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, siz
                 var_y_t[index] = 0;
                 cov_xy_t[index] = 0;
             }
-            int32_t g_t_num = cov_xy_t[index]/k_norm;
-            int32_t g_den = ((var_x_t[index] + exp_t * k_norm)/k_norm);
+            int32_t g_t_num = cov_xy_t[index];
+            int32_t g_den = var_x_t[index] + exp_t*k_norm;
 
-            sv_sq_t = (var_y_t[index] - ((int64_t)g_t_num * cov_xy_t[index])/g_den)/k_norm;
+            sv_sq_t = (var_y_t[index] - ((int64_t)g_t_num * cov_xy_t[index])/g_den);
 
 
-            // if((g_t_num < 0 && g_den > 0) || (g_den < 0 && g_t_num > 0))
-            // {
-            //     sv_sq_t = var_x_t[index];
-            //     g_t_num = 0;
-            // }
+            if((g_t_num < 0 && g_den > 0) || (g_den < 0 && g_t_num > 0))
+            {
+                sv_sq_t = var_x_t[index];
+                g_t_num = 0;
+            }
 
-            if (sv_sq_t < exp_t)
-                sv_sq_t = exp_t;
+            if (sv_sq_t < (exp_t * k_norm))
+                sv_sq_t = exp_t * k_norm;
 
-            uint64_t p1 = ((uint64_t)g_t_num * (uint64_t)g_t_num)/(uint64_t)g_den;
-            uint32_t p2 = (var_x_t[index]/k_norm);
-            uint64_t n1 = p1 * (uint64_t)p2;
-            uint64_t n2 = (((uint64_t)g_den*((uint64_t)sv_sq_t)) + (uint64_t)g_den*(uint64_t)sigma_nsq_t);
-            uint64_t num_t = n2 + n1;
-            uint64_t num_den_t = n2;
+            int64_t p1 = ((int64_t)g_t_num * (int64_t)g_t_num)/(int64_t)g_den;
+            uint32_t p2 = (uint32_t)(var_x_t[index]);
+            int64_t n1 = p1 * (int64_t)p2;
+            // int64_t n2 = (((int64_t)g_den*((int64_t)sv_sq_t)) + (int64_t)g_den*(int64_t)sigma_nsq_t);
+            int64_t n2 = (int64_t) g_den * ((int64_t) sv_sq_t + (int64_t)sigma_nsq_t);
+            int64_t num_t = n2 + n1;
+            int64_t num_den_t = n2;
             int x1, x2;
   
             uint32_t log_in_num_1 = get_best_18bitsfixed_opt_64((uint64_t)num_t, &x1);
@@ -603,7 +604,7 @@ int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, siz
             score_num_t += temp_numerator;
             num_power += temp_power_num;
 
-            uint32_t d1 = (sigma_nsq_t + (var_x_t[index]/k_norm));
+            uint32_t d1 = ((uint32_t)sigma_nsq_t + (uint32_t)(var_x_t[index]));
             uint32_t d2 = (sigma_nsq_t);
             int y1, y2;
 
