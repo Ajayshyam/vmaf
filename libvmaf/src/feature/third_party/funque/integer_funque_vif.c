@@ -184,7 +184,8 @@ void integer_vif_comp_integral(const dwt2_dtype* src_x,
 {
 	int width_p1  = (width + 1);
 	int height_p1 = (height + 1);
-	
+	int16_t knorm_fact = 25891;   // 2^21 / 81
+    int16_t knorm_shift = 21; 
     int32_t mx, my; 
     int64_t vx, vy, cxy;
 
@@ -294,9 +295,9 @@ void integer_vif_comp_integral(const dwt2_dtype* src_x,
         mx = int_1_x[row_offset + j];
         my = int_1_y[row_offset + j];
 
-        vx = int_2_x[row_offset + j] - (((int64_t)mx*mx)/kNorm);
-        vy = int_2_y[row_offset + j] - (((int64_t)my*my)/kNorm);
-        cxy = int_x_y[row_offset + j] - (((int64_t)mx*my)/kNorm);
+        vx = int_2_x[row_offset + j] - (((int64_t)mx*mx*knorm_fact)>>knorm_shift);
+        vy = int_2_y[row_offset + j] - (((int64_t)my*my*knorm_fact)>>knorm_shift);
+        cxy = int_x_y[row_offset + j] - (((int64_t)mx*my*knorm_fact)>>knorm_shift);
 
         var_x[pre_kh_kw_offset + j - kw] = vx < 0 ? 0 : (int32_t) (vx >> VIF_COMPUTE_METRIC_R_SHIFT); 
         var_y[pre_kh_kw_offset + j - kw] = vy < 0 ? 0 : (int32_t) (vy >> VIF_COMPUTE_METRIC_R_SHIFT);
@@ -394,9 +395,9 @@ void integer_vif_comp_integral(const dwt2_dtype* src_x,
             mx = int_1_x[row_offset + j];
             my = int_1_y[row_offset + j];
 
-            vx = int_2_x[row_offset + j] - (((int64_t)mx*mx)/kNorm);
-            vy = int_2_y[row_offset + j] - (((int64_t)my*my)/kNorm);
-            cxy = int_x_y[row_offset + j] - (((int64_t)mx*my)/kNorm);
+            vx = int_2_x[row_offset + j] - (((int64_t)mx*mx*knorm_fact)>>knorm_shift);
+            vy = int_2_y[row_offset + j] - (((int64_t)my*my*knorm_fact)>>knorm_shift);
+            cxy = int_x_y[row_offset + j] - (((int64_t)mx*my*knorm_fact)>>knorm_shift);
 
             var_x[pre_kh_kw_offset + j - kw] = vx < 0 ? 0 : (int32_t) (vx >> VIF_COMPUTE_METRIC_R_SHIFT); 
             var_y[pre_kh_kw_offset + j - kw] = vy < 0 ? 0 : (int32_t) (vy >> VIF_COMPUTE_METRIC_R_SHIFT);
@@ -475,9 +476,9 @@ void integer_compute_metrics(const int64_t* int_1_x, const int64_t* int_1_y, con
             // vy = (int_2_y[i * width + j] - int_2_y[i * width + j + kw] - int_2_y[(i + kh) * width + j] + int_2_y[(i + kh) * width + j + kw]) - (((int64_t)my * (int64_t)my)/kNorm);
             // cxy = (int_xy[i * width + j] - int_xy[i * width + j + kw] - int_xy[(i + kh) * width + j] + int_xy[(i + kh) * width + j + kw]) - (((int64_t)mx *(int64_t) my)/kNorm);
 
-            var_x[i * (width - kw) + j] = vx < 0 ? 0 : (int32_t) (vx >> VIF_COMPUTE_METRIC_R_SHIFT); 
-            var_y[i * (width - kw) + j] = vy < 0 ? 0 : (int32_t) (vy >> VIF_COMPUTE_METRIC_R_SHIFT);
-            cov_xy[i * (width - kw) + j] = (vx < 0 || vy < 0) ? 0 : (int32_t) (cxy >> VIF_COMPUTE_METRIC_R_SHIFT);
+            var_x[i * (width - kw) + j] = (int32_t) (vx >> VIF_COMPUTE_METRIC_R_SHIFT); 
+            var_y[i * (width - kw) + j] = (int32_t) (vy >> VIF_COMPUTE_METRIC_R_SHIFT);
+            cov_xy[i * (width - kw) + j] = (int32_t) (cxy >> VIF_COMPUTE_METRIC_R_SHIFT);
 
         }
     }
@@ -556,29 +557,33 @@ int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, siz
         for (unsigned int j = 0; j < s_width; j++)
         {
             index = i * s_width + j;
+            //These 2 loops can be kept in prev function also
+            if (var_x_t[index] < exp_t)
+            {
+                // g_t_num = 0;
+                // sv_sq_t = var_y_t[index];
+                var_x_t[index] = 0;
+                cov_xy_t[index] = 0;
+            }
+            
+            if (var_y_t[index] < exp_t)
+            {
+                // g_t_num = 0;
+                // sv_sq_t = 0;
+                var_y_t[index] = 0;
+                cov_xy_t[index] = 0;
+            }
             int32_t g_t_num = cov_xy_t[index]/k_norm;
             int32_t g_den = ((var_x_t[index] + exp_t * k_norm)/k_norm);
 
             sv_sq_t = (var_y_t[index] - ((int64_t)g_t_num * cov_xy_t[index])/g_den)/k_norm;
 
-            if (var_x_t[index] < exp_t)
-            {
-                g_t_num = 0;
-                sv_sq_t = var_y_t[index];
-                var_x_t[index] = 0;
-            }
-            
-            if (var_y_t[index] < exp_t)
-            {
-                g_t_num = 0;
-                sv_sq_t = 0;
-            }
 
-            if((g_t_num < 0 && g_den > 0) || (g_den < 0 && g_t_num > 0))
-            {
-                sv_sq_t = var_x_t[index];
-                g_t_num = 0;
-            }
+            // if((g_t_num < 0 && g_den > 0) || (g_den < 0 && g_t_num > 0))
+            // {
+            //     sv_sq_t = var_x_t[index];
+            //     g_t_num = 0;
+            // }
 
             if (sv_sq_t < exp_t)
                 sv_sq_t = exp_t;
