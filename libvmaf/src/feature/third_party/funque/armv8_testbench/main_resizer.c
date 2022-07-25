@@ -21,9 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arm_neon.h>
+#include <time.h>
 
 const int INTER_RESIZE_COEF_BITS = 11;
-const int INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS;
+// const int INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS;
+const int INTER_RESIZE_COEF_SCALE = 2048;
 static const int MAX_ESIZE = 16;
 
 #define CLIP3(X,MIN,MAX) ((X < MIN) ? MIN : (X > MAX) ? MAX : X)
@@ -40,9 +42,14 @@ static void interpolateCubic(float x, float* coeffs)
     coeffs[3] = 1.f - coeffs[0] - coeffs[1] - coeffs[2];
 }
 
-void hresize(const unsigned char** src, int** dst, int count,
+void hresize_neon(const unsigned char** src, int** dst, int count,
     const int* xofs, const short* alpha,
     int swidth, int dwidth, int cn, int xmin, int xmax) {
+    int first_col_count = 0;
+    uint8x8_t src1_8x8, src2_8x8,src3_8x8;
+    int simd_loop = (xmax/8)*8;
+    int num_pix = 8;
+    
     for (int k = 0; k < count; k++)
     {
         const unsigned char* S = src[k];
@@ -50,7 +57,7 @@ void hresize(const unsigned char** src, int** dst, int count,
         int dx = 0, limit = xmin;
         for (;;)
         {
-            for (; dx < limit; dx++, alpha += 4)
+            for (; dx < limit; dx++)
             {
                 int j, sx = xofs[dx] - cn;
                 int v = 0;
@@ -70,14 +77,100 @@ void hresize(const unsigned char** src, int** dst, int count,
             }
             if (limit == dwidth)
                 break;
-            for (; dx < xmax; dx++, alpha += 4)
+            int sx = xofs[1];
+            int start = sx-cn;
+            src1_8x8 = vld1_u8(S+start);
+           
+            for (; dx < simd_loop; )
             {
-                int sx = xofs[dx];
-                D[dx] = S[sx - cn] * alpha[0] + S[sx] * alpha[1] + S[sx + cn] * alpha[2] + S[sx + cn * 2] * alpha[3];
+                start+=num_pix;
+                src2_8x8 = vld1_u8(S+start);
+                start+=num_pix;
+                src3_8x8 = vld1_u8(S+start);
+ 
+                uint16x8_t movl1_16x8 = vmovl_u8(src1_8x8);
+                uint16x8_t movl2_16x8 = vmovl_u8(src2_8x8);
+                uint16x8_t movl3_16x8 = vmovl_u8(src3_8x8);
+                int16x8_t s_movl1_16x8 = vreinterpretq_s16_u16(movl1_16x8);
+                int16x8_t s_movl2_16x8 = vreinterpretq_s16_u16(movl2_16x8);
+                int16x8_t s_movl3_16x8 = vreinterpretq_s16_u16(movl3_16x8);
+                int16x8x2_t t1 = vuzpq_s16(s_movl1_16x8, s_movl2_16x8);// 0 odd, 1 even
+                int16x8x2_t t2 = vuzpq_s16(s_movl3_16x8, s_movl3_16x8);
+                int16x8_t vx1 = vextq_s16(t1.val[0], t2.val[0],1);//s_movl3_16x8,1);
+                int16x8_t vx2 = vextq_s16(t1.val[1], t2.val[1],1);
+                int32x4_t m1_l = vmull_n_s16(vget_low_s16(t1.val[0]), alpha[0]);
+                int32x4_t m1_h = vmull_n_s16(vget_high_s16(t1.val[0]), alpha[0]);
+                int32x4_t m2_l = vmlal_n_s16(m1_l, vget_low_s16(vx1), alpha[1]);
+                int32x4_t m2_h = vmlal_n_s16(m1_h, vget_high_s16(vx1), alpha[1]);
+                int32x4_t m3_l = vmlal_n_s16(m2_l, vget_low_s16(t1.val[1]), alpha[2]);
+                int32x4_t m3_h = vmlal_n_s16(m2_h, vget_high_s16(t1.val[1]), alpha[2]);
+                int32x4_t out_l = vmlal_n_s16(m3_l, vget_low_s16(vx2), alpha[3]); // final out
+                int32x4_t out_h = vmlal_n_s16(m3_h, vget_high_s16(vx2), alpha[3]); // final out
+
+                vst1q_s32(D+dx, out_l);
+                dx+=4;
+                vst1q_s32(D+dx, out_h);
+                dx+=4;
+                src1_8x8 = src3_8x8;
             }
+
+            for (; dx < xmax; dx++ )
+            {
+                int sx2 = xofs[dx]; //sx - 2, 4, 6, 8....
+                D[dx] = S[sx2 - cn] * alpha[0] + S[sx2] * alpha[1] + S[sx2 + cn] * alpha[2] + S[sx2 + cn * 2] * alpha[3];
+            }
+            
             limit = dwidth;
         }
-        alpha -= dwidth * 4;
+    }
+}
+
+//   clock_t startTime_g, stopTime_g;
+//     double msecElapsed_hresize_g = 0;
+
+void hresize(const unsigned char** src, int** dst, int count,
+    const int* xofs, const short* alpha,
+    int swidth, int dwidth, int cn, int xmin, int xmax) {
+    
+    for (int k = 0; k < count; k++)
+    {
+        const unsigned char* S = src[k];
+        int* D = dst[k];
+        int dx = 0, limit = xmin;
+        for (;;)
+        {
+            for (; dx < limit; dx++)
+            {
+                int j, sx = xofs[dx] - cn;
+                int v = 0;
+                for (j = 0; j < 4; j++)
+                {
+                    int sxj = sx + j * cn;
+                    if ((unsigned)sxj >= (unsigned)swidth)
+                    {
+                        while (sxj < 0)
+                            sxj += cn;
+                        while (sxj >= swidth)
+                            sxj -= cn;
+                    }
+                    v += S[sxj] * alpha[j];
+                }
+                D[dx] = v;
+            }
+            if (limit == dwidth)
+                break;
+            // startTime_g = clock();
+
+            for (; dx < xmax; dx++)
+            {
+                int sx = xofs[dx]; //sx - 2, 4, 6, 8....
+                D[dx] = S[sx - cn] * alpha[0] + S[sx] * alpha[1] + S[sx + cn] * alpha[2] + S[sx + cn * 2] * alpha[3];
+            }
+                //  stopTime_g = clock();
+            // msecElapsed_hresize_g += (stopTime_g - startTime_g) * 1000.0 / CLOCKS_PER_SEC;
+       
+            limit = dwidth;
+        }
     }
 }
 
@@ -87,14 +180,6 @@ unsigned char castOp(int val)
     int SHIFT = bits;
     int DELTA = (1 << (bits - 1));
     return CLIP3((val + DELTA) >> SHIFT, 0, 255);
-}
-
-int castOp2(int val)
-{
-    int bits = 22;
-    int SHIFT = bits;
-    int DELTA = (1 << (bits - 1));
-    return val+DELTA >> SHIFT;
 }
 
 void vresize(const int** src, unsigned char* dst, const short* beta, int width)
@@ -108,8 +193,6 @@ void vresize(const int** src, unsigned char* dst, const short* beta, int width)
 
 void vresize_neon(const int** src, unsigned char* dst, const short* beta, int width)
 {
-    int b0 = beta[0], b1 = beta[1], b2 = beta[2], b3 = beta[3];
-    const int* S0 = src[0], * S1 = src[1], * S2 = src[2], * S3 = src[3];
     int32x4_t src_1, src_2, src_3, src_4, src_1_mul;
     int32x4_t d4_q;
     int32x4_t add_1;
@@ -186,9 +269,11 @@ void step(const unsigned char* _src, unsigned char* _dst, const int* xofs, const
         rows[k] = _buffer + bufstep * k;
     }
 
-    const short* beta = _beta + ksize * start;
-
-    for (dy = start; dy < end; dy++, beta += ksize)
+    // int count = 0;
+    //  clock_t startTime, stopTime;
+    //     double msecElapsed_hresize = 0, msecElapsed_vresize = 0;
+       
+    for (dy = start; dy < end; dy++)
     {
         int sy0 = yofs[dy], k0 = ksize, k1 = 0, ksize2 = ksize / 2;
 
@@ -211,10 +296,24 @@ void step(const unsigned char* _src, unsigned char* _dst, const int* xofs, const
         }
 
         if (k0 < ksize)
+        {
+        //     startTime = clock();
             hresize((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
                 iwidth, dwidth, cn, xmin, xmax);
-        vresize((const int**)rows, (_dst + dwidth * dy), beta, dwidth);
+            
+        //     stopTime = clock();
+        //     msecElapsed_hresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+           
+        }
+       
+        // startTime = clock();
+        vresize((const int**)rows, (_dst + dwidth * dy), _beta, dwidth);
+        // stopTime = clock();
+        // msecElapsed_vresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+       
     }
+    // printf("H resize time: %f ms\n", msecElapsed_hresize);
+    // printf("V resize time: %f ms\n", msecElapsed_vresize);
     free(_buffer);
 }
 
@@ -238,9 +337,11 @@ void step_neon(const unsigned char* _src, unsigned char* _dst, const int* xofs, 
         rows[k] = _buffer + bufstep * k;
     }
 
-    const short* beta = _beta + ksize * start;
+    //     int count = 0;
+    //  clock_t startTime, stopTime;
+    //     double msecElapsed_hresize = 0, msecElapsed_vresize = 0;
 
-    for (dy = start; dy < end; dy++, beta += ksize)
+    for (dy = start; dy < end; dy++)
     {
         int sy0 = yofs[dy], k0 = ksize, k1 = 0, ksize2 = ksize / 2;
 
@@ -263,10 +364,24 @@ void step_neon(const unsigned char* _src, unsigned char* _dst, const int* xofs, 
         }
 
         if (k0 < ksize)
-            hresize((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
+        {
+        //     startTime = clock();
+            hresize_neon((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
                 iwidth, dwidth, cn, xmin, xmax);
-        vresize_neon((const int**)rows, (_dst + dwidth * dy), beta, dwidth);
+
+        //     stopTime = clock();
+        //     msecElapsed_hresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+        }
+       
+        // startTime = clock();
+        vresize_neon((const int**)rows, (_dst + dwidth * dy), _beta, dwidth);
+        // stopTime = clock();
+        // msecElapsed_vresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+       
     }
+    // printf("H resize time: %f ms\n", msecElapsed_hresize);
+    // printf("V resize time neon: %f ms\n", msecElapsed_vresize);
+    
     free(_buffer);
 }
 
@@ -287,7 +402,6 @@ void resize(const unsigned char* _src, unsigned char* _dst, int iwidth, int ihei
 
     int xmin = 0, xmax = dwidth, width = dwidth * cn;
 
-    // int fixpt = 1;
     float fx, fy;
     int ksize = 4, ksize2;
     ksize2 = ksize / 2;
@@ -296,10 +410,6 @@ void resize(const unsigned char* _src, unsigned char* _dst, int iwidth, int ihei
 
     int* xofs = (int*)_buffer;
     int* yofs = xofs + width;
-    float* alpha = (float*)(yofs + dheight);
-    short* ialpha = (short*)alpha;
-    float* beta = alpha + width * ksize;
-    short* ibeta = ialpha + width * ksize;
     float cbuf[4] = { 0 };
 
     for (dx = 0; dx < dwidth; dx++)
@@ -320,23 +430,6 @@ void resize(const unsigned char* _src, unsigned char* _dst, int iwidth, int ihei
 
         for (k = 0, sx *= cn; k < cn; k++)
             xofs[dx * cn + k] = sx + k;
-
-        interpolateCubic(fx, cbuf);
-
-        // if (fixpt)
-        // {
-            for (k = 0; k < ksize; k++)
-                ialpha[dx * cn * ksize + k] = (short)(cbuf[k] * INTER_RESIZE_COEF_SCALE);
-            for (; k < cn * ksize; k++)
-                ialpha[dx * cn * ksize + k] = ialpha[dx * cn * ksize + k - ksize];
-        // }
-        // else
-        // {
-        //     for (k = 0; k < ksize; k++)
-        //         alpha[dx * cn * ksize + k] = cbuf[k];
-        //     for (; k < cn * ksize; k++)
-        //         alpha[dx * cn * ksize + k] = alpha[dx * cn * ksize + k - ksize];
-        // }
     }
 
     for (dy = 0; dy < dheight; dy++)
@@ -346,20 +439,10 @@ void resize(const unsigned char* _src, unsigned char* _dst, int iwidth, int ihei
         fy -= sy;
 
         yofs[dy] = sy;
-
-        interpolateCubic(fy, cbuf);
-
-        // if (fixpt)
-        // {
-            for (k = 0; k < ksize; k++)
-                ibeta[dy * ksize + k] = (short)(cbuf[k] * INTER_RESIZE_COEF_SCALE);
-        // }
-        // else
-        // {
-        //     for (k = 0; k < ksize; k++)
-        //         beta[dy * ksize + k] = cbuf[k];
-        // }
     }
+
+    const short ibeta[] = {-192, 1216, 1216, -192};
+    const short ialpha[] = {-192, 1216, 1216, -192};
 
     if(neon == 1)
         step_neon(_src, _dst, xofs, yofs, ialpha, ibeta, iwidth, iheight, dwidth, dheight, cn, ksize, 0, dheight, xmin, xmax);
@@ -380,10 +463,13 @@ int compare(const unsigned char* _x, const unsigned char* _x_simd, int iwidth, i
             {
                 printf("mismatch element C: %u, ARM: %u, column: %ld, row: %ld, index(row*width+col): %d \n", _x[index], _x_simd[index], j, i, index);
                 count++;
+                goto label;
+               
             }
         }
     }
 
+    label:
     printf("total mismatches: %d\n", count);
     printf("total elements: %d\n",iheight*iwidth);
 
@@ -392,8 +478,8 @@ int compare(const unsigned char* _x, const unsigned char* _x_simd, int iwidth, i
 
 int main()
 {
-    int height = 1920;
-    int width = 1080;
+    int height = 7680;
+    int width = 4320;
 
     int max = 255;
     int min = 0;
@@ -413,8 +499,23 @@ int main()
         }
     }
 
+    clock_t startTime, stopTime;
+    double msecElapsed;
+    startTime = clock();
     resize(x, y, width, height, width/2, height/2, 0);
+
+    stopTime = clock();
+    msecElapsed = (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+    // printf("hresize: %f ms\n  ",  msecElapsed_hresize_g);
+    printf("Overall resize time: %f ms\n-------------\n", msecElapsed);
+
+    startTime = clock();
     resize(x, y_neon, width, height, width/2, height/2, 1);
+
+    stopTime = clock();
+    msecElapsed = (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+    printf("Overall resize time with neon: %f ms\n", msecElapsed);
+
     compare(y, y_neon, width/2, height/2);
 
     free(x);
