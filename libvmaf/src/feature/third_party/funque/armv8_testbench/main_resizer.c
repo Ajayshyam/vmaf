@@ -32,6 +32,10 @@ static const int MAX_ESIZE = 16;
 #define MAX(LEFT, RIGHT) (LEFT > RIGHT ? LEFT : RIGHT)
 #define MIN(LEFT, RIGHT) (LEFT < RIGHT ? LEFT : RIGHT)
 
+#define MEASURE_SUB_COMPONENTS 0
+#define MEASURE_TOTAL 1
+#define USE_C_VRESIZE 1
+
 static void interpolateCubic(float x, float* coeffs)
 {
     const float A = -0.75f;
@@ -269,9 +273,10 @@ void step(const unsigned char* _src, unsigned char* _dst, const int* xofs, const
         rows[k] = _buffer + bufstep * k;
     }
 
-    // int count = 0;
-    //  clock_t startTime, stopTime;
-    //     double msecElapsed_hresize = 0, msecElapsed_vresize = 0;
+#if MEASURE_SUB_COMPONENTS
+    clock_t startTime, stopTime;
+    double msecElapsed_hresize = 0, msecElapsed_vresize = 0;
+#endif
        
     for (dy = start; dy < end; dy++)
     {
@@ -297,23 +302,34 @@ void step(const unsigned char* _src, unsigned char* _dst, const int* xofs, const
 
         if (k0 < ksize)
         {
-        //     startTime = clock();
+#if MEASURE_SUB_COMPONENTS
+            startTime = clock();
+#endif
+
             hresize((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
                 iwidth, dwidth, cn, xmin, xmax);
-            
-        //     stopTime = clock();
-        //     msecElapsed_hresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+
+#if MEASURE_SUB_COMPONENTS
+            stopTime = clock();
+            msecElapsed_hresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+#endif
            
         }
-       
-        // startTime = clock();
+#if MEASURE_SUB_COMPONENTS
+        startTime = clock();
+#endif
         vresize((const int**)rows, (_dst + dwidth * dy), _beta, dwidth);
-        // stopTime = clock();
-        // msecElapsed_vresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+#if MEASURE_SUB_COMPONENTS
+        stopTime = clock();
+        msecElapsed_vresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+#endif
        
     }
-    // printf("H resize time: %f ms\n", msecElapsed_hresize);
-    // printf("V resize time: %f ms\n", msecElapsed_vresize);
+
+#if MEASURE_SUB_COMPONENTS
+    printf("H resize time: %f ms\n", msecElapsed_hresize);
+    printf("V resize time: %f ms\n", msecElapsed_vresize);
+#endif
     free(_buffer);
 }
 
@@ -337,9 +353,10 @@ void step_neon(const unsigned char* _src, unsigned char* _dst, const int* xofs, 
         rows[k] = _buffer + bufstep * k;
     }
 
-    //     int count = 0;
-    //  clock_t startTime, stopTime;
-    //     double msecElapsed_hresize = 0, msecElapsed_vresize = 0;
+#if MEASURE_SUB_COMPONENTS
+    clock_t startTime, stopTime;
+    double msecElapsed_hresize = 0, msecElapsed_vresize = 0;
+#endif
 
     for (dy = start; dy < end; dy++)
     {
@@ -365,22 +382,40 @@ void step_neon(const unsigned char* _src, unsigned char* _dst, const int* xofs, 
 
         if (k0 < ksize)
         {
-        //     startTime = clock();
+#if MEASURE_SUB_COMPONENTS
+            startTime = clock();
+#endif
+
             hresize_neon((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
                 iwidth, dwidth, cn, xmin, xmax);
 
-        //     stopTime = clock();
-        //     msecElapsed_hresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+#if MEASURE_SUB_COMPONENTS
+            stopTime = clock();
+            msecElapsed_hresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+#endif
         }
-       
-        // startTime = clock();
+
+#if MEASURE_SUB_COMPONENTS
+        startTime = clock();
+#endif
+
+#if USE_C_VRESIZE
+        vresize((const int**)rows, (_dst + dwidth * dy), _beta, dwidth);
+#elif !USE_C_VRESIZE
         vresize_neon((const int**)rows, (_dst + dwidth * dy), _beta, dwidth);
-        // stopTime = clock();
-        // msecElapsed_vresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+#endif
+
+#if MEASURE_SUB_COMPONENTS
+        stopTime = clock();
+        msecElapsed_vresize += (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+#endif
        
     }
-    // printf("H resize time: %f ms\n", msecElapsed_hresize);
-    // printf("V resize time neon: %f ms\n", msecElapsed_vresize);
+
+#if MEASURE_SUB_COMPONENTS
+    printf("H resize time neon: %f ms\n", msecElapsed_hresize);
+    printf("V resize time neon: %f ms\n", msecElapsed_vresize);
+#endif
     
     free(_buffer);
 }
@@ -481,6 +516,9 @@ int main()
     int height = 7680;
     int width = 4320;
 
+    // int height = 1920;
+    // int width = 1080;
+
     int max = 255;
     int min = 0;
 
@@ -499,23 +537,30 @@ int main()
         }
     }
 
+#if MEASURE_TOTAL
     clock_t startTime, stopTime;
     double msecElapsed;
     startTime = clock();
+#endif
+
     resize(x, y, width, height, width/2, height/2, 0);
 
+#if MEASURE_TOTAL
     stopTime = clock();
     msecElapsed = (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
     // printf("hresize: %f ms\n  ",  msecElapsed_hresize_g);
     printf("Overall resize time: %f ms\n-------------\n", msecElapsed);
 
     startTime = clock();
+#endif
+
     resize(x, y_neon, width, height, width/2, height/2, 1);
 
+#if MEASURE_TOTAL
     stopTime = clock();
     msecElapsed = (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
     printf("Overall resize time with neon: %f ms\n", msecElapsed);
-
+#endif
     compare(y, y_neon, width/2, height/2);
 
     free(x);
