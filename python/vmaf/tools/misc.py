@@ -1,4 +1,6 @@
+import re
 import subprocess
+import tempfile
 import unittest
 from fnmatch import fnmatch
 import multiprocessing
@@ -199,20 +201,51 @@ def indices(a, func):
     return [i for (i, val) in enumerate(a) if func(val)]
 
 
-def import_python_file(filepath):
+def import_python_file(filepath : str, override : dict = None):
     """
-    Import a python file as a module.
-    :param filepath:
-    :return:
+    Import a python file as a module, allowing overriding some of the variables.
+    Assumption: in the original python file, variables to be overridden get assigned once only, in a single line.
     """
-    filename = get_file_name_without_extension(filepath)
-    try:
-        from importlib.machinery import SourceFileLoader
-        ret = SourceFileLoader(filename, filepath).load_module()
-    except ImportError:
-        import imp
-        ret = imp.load_source(filename, filepath)
-    return ret
+    if override is None:
+        filename = get_file_name_without_extension(filepath)
+        try:
+            from importlib.machinery import SourceFileLoader
+            ret = SourceFileLoader(filename, filepath).load_module()
+        except ImportError:
+            import imp
+            ret = imp.load_source(filename, filepath)
+        return ret
+    else:
+        override_ = override.copy()
+        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix='.py')
+        with open(filepath, 'r') as fin:
+            with open(tmpfile.name, 'w') as fout:
+                while True:
+                    line = fin.readline()
+                    if len(override_) > 0:
+                        suffixes = []
+                        for key in list(override_.keys()):
+                            if key in line and '=' in line:
+                                s = f"{key} = '{override_[key]}'" if isinstance(override_[key], str) else f"{key} = {override_[key]}"
+                                suffixes.append(s)
+                                del override_[key]
+                        if len(suffixes) > 0:
+                            line = '\n'.join([line.strip()] + suffixes) + '\n'
+                    fout.write(line)
+                    if not line:
+                        break
+                if len(override_) > 0:
+                    for key in override_:
+                        s = f"{key} = '{override_[key]}'" if isinstance(override_[key], str) else f"{key} = {override_[key]}"
+                        s += '\n'
+                        fout.write(s)
+        #============= debug =================
+        # with open(tmpfile.name, 'r') as fin:
+        #     print(fin.read())
+        #=====================================
+        ret = import_python_file(tmpfile.name)
+        os.remove(tmpfile.name)
+        return ret
 
 
 def make_absolute_path(path, current_dir):
@@ -526,8 +559,9 @@ class MyTestCase(unittest.TestCase):
 
 class QualityRunnerTestMixin(object):
 
-    def run_each(self, score, runner_class, asset, optional_dict,
-                 optional_dict2=None, result_store=None, places=5):
+    @staticmethod
+    def _run_each_no_assert(runner_class, asset, optional_dict,
+                            optional_dict2=None, result_store=None, **more):
         runner = runner_class(
             [asset],
             None,
@@ -538,9 +572,28 @@ class QualityRunnerTestMixin(object):
             optional_dict2=optional_dict2,
         )
         runner.run(parallelize=False)
-        results = runner.results
-        self.assertAlmostEqual(results[0][runner_class.get_score_key()],
+        result = runner.results[0]
+        return result
+
+    def run_each(self, score, runner_class, asset, optional_dict,
+                 optional_dict2=None, result_store=None, places=5, **more):
+        result = self._run_each_no_assert(
+            runner_class, asset, optional_dict,
+            optional_dict2, result_store, **more)
+        self.assertAlmostEqual(result[runner_class.get_score_key()],
                                score, places=places)
+
+    def plot_frame_scores(self, ax, *args, **kwargs):
+        result = self._run_each_no_assert(*args, **kwargs)
+        runner_class, asset, optional_dict = args
+        avg_score = result[runner_class.get_score_key()]
+        label = [f'avg. {runner_class.TYPE}: {avg_score:.3f}']
+        if 'label' in kwargs:
+            label += [kwargs['label']]
+        label = ', '.join(label)
+        ax.set_xlabel('Frame Number')
+        ax.set_ylabel('Score')
+        ax.plot(result[runner_class.get_scores_key()], label=label)
 
 
 def find_linear_function_parameters(p1, p2):
@@ -714,6 +767,38 @@ def round_up_to_odd(f):
     35
     """
     return int(np.ceil(f) // 2 * 2 + 1)
+
+
+class NoPrint(object):
+
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout
+
+
+def linear_func(x, a, b):
+    return a*x + b
+
+
+def linear_fit(x, y):
+    """
+    >>> fit = linear_fit([0, 1], [0, 1])
+    >>> (fit[0][0], fit[0][1])
+    (1.0, 0.0)
+    """
+    assert isinstance(x, (list, tuple, np.ndarray)), 'x must be a list, tuple, or a numpy array'
+    assert len(x) == np.size(x) and len(x) > 0, 'x must be one-dimensional with non-zero length'
+    assert isinstance(y, (list, tuple, np.ndarray)), 'y must be a list or a numpy array'
+    assert len(y) == np.size(y) and len(y) > 0, 'y must be one-dimensional with non-zero length'
+    assert len(x) == len(y), 'x must be the same length as y'
+
+    import scipy.optimize
+    return scipy.optimize.curve_fit(linear_func, x, y, [1.0, 0.0])
+
 
 if __name__ == '__main__':
     import doctest

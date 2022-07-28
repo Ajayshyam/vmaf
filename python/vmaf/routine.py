@@ -52,7 +52,7 @@ def read_dataset(dataset, **kwargs):
     start_frame = dataset.start_frame if hasattr(dataset, 'start_frame') else None
     end_frame = dataset.end_frame if hasattr(dataset, 'end_frame') else None
 
-    ref_dict = {} # dictionary of content_id -> path for ref videos
+    ref_dict = {}  # dictionary of content_id -> path for ref videos
     for ref_video in ref_videos:
         ref_dict[ref_video['content_id']] = ref_video
 
@@ -245,6 +245,15 @@ def read_dataset(dataset, **kwargs):
         if end_frame_ is not None:
             asset_dict['end_frame'] = end_frame_
 
+        if 'ref_start_frame' in ref_video:
+            asset_dict['ref_start_frame'] = ref_video['ref_start_frame']
+        if 'dis_start_frame' in dis_video:
+            asset_dict['dis_start_frame'] = dis_video['dis_start_frame']
+        if 'ref_end_frame' in ref_video:
+            asset_dict['ref_end_frame'] = ref_video['ref_end_frame']
+        if 'dis_end_frame' in dis_video:
+            asset_dict['dis_end_frame'] = dis_video['dis_end_frame']
+
         if groundtruth is None and skip_asset_with_none_groundtruth:
             pass
         else:
@@ -402,7 +411,7 @@ def run_test_on_dataset(test_dataset, runner_class, ax,
     if ax is not None:
         content_ids = list(map(lambda asset: asset.content_id, test_assets))
 
-        if 'point_label' in kwargs:
+        if 'point_label' in kwargs and kwargs['point_label'] is not None:
             if kwargs['point_label'] == 'asset_id':
                 point_labels = list(map(lambda asset: asset.asset_id, test_assets))
             elif kwargs['point_label'] == 'dis_path':
@@ -480,7 +489,7 @@ def train_test_vmaf_on_dataset(train_dataset, test_dataset,
         fifo_mode=fifo_mode,
         delete_workdir=True,
         result_store=result_store,
-        optional_dict=None,
+        optional_dict=None,  # WARNING: feature param not passed
         optional_dict2=None,
         parallelize=parallelize,
         processes=processes,
@@ -582,7 +591,7 @@ def train_test_vmaf_on_dataset(train_dataset, test_dataset,
             fifo_mode=fifo_mode,
             delete_workdir=True,
             result_store=result_store,
-            optional_dict=None,
+            optional_dict=None,  # WARNING: feature param not passed
             optional_dict2=None,
             parallelize=parallelize,
         )
@@ -646,7 +655,7 @@ def cv_on_dataset(dataset, feature_param, model_param, ax, result_store,
         logger=logger,
         delete_workdir=True,
         result_store=result_store,
-        optional_dict=None,
+        optional_dict=None,  # WARNING: feature param not passed
         optional_dict2=None,
         parallelize=True, fifo_mode=True,
         # parallelize=False, fifo_mode=False, # VQM
@@ -791,7 +800,7 @@ def explain_model_on_dataset(model, test_assets_selected_indexs,
         fifo_mode=True,
         delete_workdir=True,
         result_store=result_store,
-        optional_dict=None,
+        optional_dict=None,  # WARNING: feature param not passed
         optional_dict2=None,
         parallelize=True,
     )

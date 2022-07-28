@@ -8,6 +8,7 @@ import numpy as np
 
 from libsvm import svmutil
 
+import vmaf
 from vmaf.config import VmafConfig
 from vmaf import ExternalProgramCaller, convert_pixel_format_ffmpeg2vmafexec
 from vmaf.core.executor import Executor
@@ -20,7 +21,6 @@ from vmaf.core.feature_extractor import SsimFeatureExtractor, \
     MsSsimFeatureExtractor, \
     VmafFeatureExtractor, PsnrFeatureExtractor, VmafIntegerFeatureExtractor, \
     FeatureExtractor
-from vmaf.core.noref_feature_extractor import BrisqueNorefFeatureExtractor
 from vmaf.core.vmafexec_feature_extractor import CIEDE2000FeatureExtractor
 from vmaf.tools.decorator import override
 
@@ -358,7 +358,7 @@ class VmafQualityRunner(VmafQualityRunnerModelMixin, QualityRunner):
 
     # trained with resource/param/vmaf_v6.py on private/user/zli/resource/dataset/dataset/derived/vmafplusstudy_laptop_raw_generalandcornercase.py, MLER, y=x+17
     # modified from vmaf_float_v0.6.1.pkl to use integer features
-    DEFAULT_MODEL_FILEPATH = VmafConfig.model_path("vmaf_v0.6.1.json")
+    DEFAULT_MODEL_FILEPATH = vmaf.model_path("vmaf_v0.6.1.json")
 
     DEFAULT_FEATURE_DICT = {'VMAF_feature': ['vif', 'adm', 'motion', 'ansnr']}  # for backward-compatible with older model only
 
@@ -398,7 +398,7 @@ class VmafQualityRunner(VmafQualityRunnerModelMixin, QualityRunner):
             fifo_mode=self.fifo_mode,
             delete_workdir=self.delete_workdir,
             result_store=self.result_store,
-            optional_dict=None,
+            optional_dict=self.optional_dict,
             optional_dict2=self.optional_dict2,
             parallelize=False,  # parallelization already in a higher level
         )
@@ -609,6 +609,11 @@ class VmafQualityRunner(VmafQualityRunnerModelMixin, QualityRunner):
         vmaf_fassembler.remove_results()
 
 
+class VmafnegQualityRunner(VmafQualityRunner):
+    TYPE = 'VMAFNEG'
+    DEFAULT_MODEL_FILEPATH = vmaf.model_path('vmaf_v0.6.1neg.json')
+
+
 class EnsembleVmafQualityRunner(VmafQualityRunner):
     TYPE = 'EnsembleVMAF'
 
@@ -644,7 +649,7 @@ class EnsembleVmafQualityRunner(VmafQualityRunner):
                 fifo_mode=self.fifo_mode,
                 delete_workdir=self.delete_workdir,
                 result_store=self.result_store,
-                optional_dict=None,
+                optional_dict=None,  # WARNING: feature param not passed
                 optional_dict2=None,
                 parallelize=False,  # parallelization already in a higher level
             )
@@ -816,7 +821,7 @@ class VmafossExecQualityRunner(QualityRunner, FeatureDiscoveryMixin):
     ALGO_VERSION = 2
 
     # trained with resource/param/vmaf_v6.py on private/user/zli/resource/dataset/dataset/derived/vmafplusstudy_laptop_raw_generalandcornercase.py, MLER, y=x+17
-    DEFAULT_MODEL_FILEPATH = VmafConfig.model_path("vmaf_v0.6.1.json")
+    DEFAULT_MODEL_FILEPATH = vmaf.model_path("vmaf_v0.6.1.json")
 
     FEATURES = ['adm2', 'adm_scale0', 'adm_scale1', 'adm_scale2', 'adm_scale3',
                 'motion', 'vif_scale0', 'vif_scale1', 'vif_scale2',
@@ -1044,8 +1049,8 @@ class VmafSingleFeatureQualityRunner(QualityRunner):
             fifo_mode=self.fifo_mode,
             delete_workdir=self.delete_workdir,
             result_store=self.result_store,
-            optional_dict=None,
-            optional_dict2=None,
+            optional_dict=self.optional_dict,
+            optional_dict2=self.optional_dict2,
             parallelize=False,  # parallelization already in a higher level
         )
         return vmaf_fassembler
@@ -1345,7 +1350,7 @@ class VmafexecQualityRunner(QualityRunner, FeatureDiscoveryMixin):
     VERSION = 'F' + VmafFeatureExtractor.VERSION + '-0.6.1'
     ALGO_VERSION = 2
 
-    DEFAULT_MODEL_FILEPATH = VmafConfig.model_path("vmaf_v0.6.1.json")
+    DEFAULT_MODEL_FILEPATH = vmaf.model_path("vmaf_v0.6.1.json")
 
     FEATURES = [
                 'adm2', 'motion2', 'vif_scale0', 'vif_scale1', 'vif_scale2', 'vif_scale3',

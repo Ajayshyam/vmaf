@@ -22,9 +22,13 @@
 #include "feature_extractor.h"
 #include "feature_name.h"
 #include "integer_adm.h"
+#include "log.h"
 
 #if ARCH_X86
 #include "x86/adm_avx2.h"
+#elif ARCH_AARCH64
+#include "arm64/adm_neon.h"
+#include <arm_neon.h>
 #endif
 
 #include "funque_profiler.h"
@@ -2582,12 +2586,25 @@ static int init(VmafFeatureExtractor *fex, enum VmafPixelFormat pix_fmt,
     (void) pix_fmt;
     (void) bpc;
 
+    if (w <= 32 || h <= 32) {
+        vmaf_log(VMAF_LOG_LEVEL_ERROR,
+                 "%s: invalid size (%dx%d), "
+                 "width/height must be greater than 32\n",
+                 fex->name, w, h);
+        return -EINVAL;
+    }
+
     s->dwt2_8 = adm_dwt2_8;
 
 #if ARCH_X86
     unsigned flags = vmaf_get_cpu_flags();
     if (flags & VMAF_X86_CPU_FLAG_AVX2) {
         if (!(w % 8)) s->dwt2_8 = adm_dwt2_8_avx2;
+    }
+#elif ARCH_AARCH64
+    unsigned flags = vmaf_get_cpu_flags();
+    if (flags & VMAF_ARM_CPU_FLAG_NEON) {
+        if (!(w % 8)) s->dwt2_8 = adm_dwt2_8_neon;
     }
 #endif
 

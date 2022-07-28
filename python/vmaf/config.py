@@ -43,12 +43,25 @@ class VmafExternalConfig(object):
             path = getattr(externals, name, None)
             if path and os.path.exists(path):
                 return path
-
         except ImportError:
             print('ImportError')
-
             pass
 
+        return None
+
+    @staticmethod
+    def _attr_from_external(name):
+        """
+        :param str name: Name of external configuration to look up
+        :return str: Configured attribute (not path), if any
+        """
+        try:
+            from . import externals
+            attr = getattr(externals, name, None)
+            return attr
+        except ImportError:
+            print('ImportError')
+            pass
         return None
 
     @classmethod
@@ -57,6 +70,14 @@ class VmafExternalConfig(object):
         :return str: Path to ffmpeg, if installed and configured via `externals` module
         """
         return cls._path_from_external('FFMPEG_PATH')
+
+    @classmethod
+    def ffmpeg_env(cls):
+        """
+        :return dict: Dictionary of environmental variables when running ffmpeg, if installed and configured via
+        'externals` module
+        """
+        return cls._attr_from_external('FFMPEG_ENV')
 
     @classmethod
     def matlab_path(cls):

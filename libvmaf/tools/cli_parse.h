@@ -30,6 +30,8 @@ typedef struct {
 
 typedef struct {
     char *path_ref, *path_dist;
+    unsigned frame_skip_ref;
+    unsigned frame_skip_dist;
     unsigned frame_cnt;
     unsigned width, height;
     enum VmafPixelFormat pix_fmt;

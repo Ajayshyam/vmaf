@@ -527,7 +527,7 @@ class Executor(TypeVersionEnabled):
         if self.logger:
             self.logger.info(ffmpeg_cmd)
 
-        run_process(ffmpeg_cmd, shell=True)
+        run_process(ffmpeg_cmd, shell=True, env=VmafExternalConfig.ffmpeg_env())
 
     def _open_dis_workfile(self, asset, fifo_mode):
         # only need to open dis workfile if the path is different from dis path
@@ -577,7 +577,7 @@ class Executor(TypeVersionEnabled):
         if self.logger:
             self.logger.info(ffmpeg_cmd)
 
-        run_process(ffmpeg_cmd, shell=True)
+        run_process(ffmpeg_cmd, shell=True, env=VmafExternalConfig.ffmpeg_env())
 
     # ===== procfile =====
 
@@ -659,9 +659,11 @@ class Executor(TypeVersionEnabled):
         else:
             assert False, 'target cannot be {}'.format(target)
 
-        if get_file_name_extension(path) in ['icpf', 'j2c', 'j2k', 'tiff']:
+        if get_file_name_extension(path) in ['j2c', 'j2k', 'tiff']:
             # 2147483647 is INT_MAX if int is 4 bytes
-            return "-start_number_range 2147483647"
+            return "-f image2 -start_number_range 2147483647"
+        elif get_file_name_extension(path) in ['icpf']:
+            return "-f image2 -c:v netflixprores -start_number_range 2147483647"
         elif get_file_name_extension(path) in ['265']:
             return "-c:v hevc"
         else:
