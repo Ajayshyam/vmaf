@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 #include <arm_neon.h>
 
@@ -500,13 +501,30 @@ int main()
         }
     }
 
+    clock_t startTime, stopTime;
+    double msecElapsed;
+    startTime = clock();
     for (int k = 1; k < 4; k++)
     {
-        integer_integral_image_adm_sums(pyr_1, pyr_2.bands[k], 3, 1, masked_pyr, width, height, k);
+        integer_integral_image_adm_sums(pyr_1, pyr_2.bands[k], 3, 1, masked_pyr, width, height, k);        
+    }
+    stopTime = clock();
+    msecElapsed = (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+    printf("Overall adm c time: %f ms\n-------------\n", msecElapsed);
+
+    startTime = clock();
+    for (int k = 1; k < 4; k++)
+    {
         integer_integral_image_adm_sums_neon(pyr_1, pyr_2.bands[k], 3, 1, masked_pyr_neon, width, height, k);
+    }
+    stopTime = clock();
+    msecElapsed = (stopTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+    printf("Overall adm neon time: %f ms\n-------------\n", msecElapsed);
+
+    for (int k = 1; k < 4; k++)
+    {
         compare(masked_pyr.bands[k], masked_pyr_neon.bands[k], width, height, k);
     }
-
     return 0;
 }
 
