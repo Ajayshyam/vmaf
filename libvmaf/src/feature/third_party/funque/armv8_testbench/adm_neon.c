@@ -310,29 +310,49 @@ void integer_integral_image_adm_sums_neon(i16_adm_buffers pyr_1, uint16_t *x, in
         		// masked_pyr.bands[3][index] = val;
 
                 int32x4_t mt = vld1q_s32(sum + ((i + k) * int_stride + j + k));
-                uint16x4_t xt = vld1_u16(x+index);
-                uint32x4_t xt_m = vmovl_u16(xt);
+                int32x4_t mt2 = vld1q_s32(sum + ((i + k) * int_stride + j + k) + 4);
+                uint16x8_t xt = vld1q_u16(x+index);
+                uint32x4_t xt_m = vmovl_u16(vget_low_u16(xt));
+                uint32x4_t xt_m_2 = vmovl_u16(vget_high_u16(xt));
                 int32x4_t masking_threshold = vaddq_s32(vreinterpretq_s32_u32(xt_m), mt);
+                int32x4_t masking_threshold_2 = vaddq_s32(vreinterpretq_s32_u32(xt_m_2), mt2);
+
                 int16x4_t val_1_t = vld1_s16(pyr_1.bands[1] + index);
                 int16x4_t val_2_t = vld1_s16(pyr_1.bands[2] + index);
                 int16x4_t val_3_t = vld1_s16(pyr_1.bands[3] + index);
-                int32x4_t val_1 = vmovl_s16(val_1_t);
-                int32x4_t val_2 = vmovl_s16(val_2_t);
-                int32x4_t val_3 = vmovl_s16(val_3_t);
-                int32x4_t val_1abs = vabsq_s32(val_1);
-                int32x4_t val_2abs = vabsq_s32(val_2);
-                int32x4_t val_3abs = vabsq_s32(val_3);
-                int32x4_t mull1 = vmulq_n_s32(val_1abs, 30);
-                int32x4_t mull2 = vmulq_n_s32(val_2abs, 30);
-                int32x4_t mull3 = vmulq_n_s32(val_3abs, 30);
+                int16x4_t val_1_t_2 = vld1_s16(pyr_1.bands[1] + index + 4);
+                int16x4_t val_2_t_2 = vld1_s16(pyr_1.bands[2] + index + 4);
+                int16x4_t val_3_t_2 = vld1_s16(pyr_1.bands[3] + index + 4);
+
+                int16x4_t val_1abs = vabs_s16(val_1_t);
+                int16x4_t val_2abs = vabs_s16(val_2_t);
+                int16x4_t val_3abs = vabs_s16(val_3_t);
+                int16x4_t val_1abs_2 = vabs_s16(val_1_t_2);
+                int16x4_t val_2abs_2 = vabs_s16(val_2_t_2);
+                int16x4_t val_3abs_2 = vabs_s16(val_3_t_2);
+
+                int32x4_t mull1 = vmull_n_s16(val_1abs, 30); 
+                int32x4_t mull2 = vmull_n_s16(val_2abs, 30);
+                int32x4_t mull3 = vmull_n_s16(val_3abs, 30);
+                int32x4_t mull1_2 = vmull_n_s16(val_1abs_2, 30); 
+                int32x4_t mull2_2 = vmull_n_s16(val_2abs_2, 30);
+                int32x4_t mull3_2 = vmull_n_s16(val_3abs_2, 30);
+
                 int32x4_t sub_1 = vsubq_s32(mull1, masking_threshold);
                 int32x4_t sub_2 = vsubq_s32(mull2, masking_threshold);
                 int32x4_t sub_3 = vsubq_s32(mull3, masking_threshold);
+                int32x4_t sub_1_2 = vsubq_s32(mull1_2, masking_threshold_2);
+                int32x4_t sub_2_2 = vsubq_s32(mull2_2, masking_threshold_2);
+                int32x4_t sub_3_2 = vsubq_s32(mull3_2, masking_threshold_2);
+
                 vst1q_s32(masked_pyr.bands[1] + index, sub_1);
                 vst1q_s32(masked_pyr.bands[2] + index, sub_2);
                 vst1q_s32(masked_pyr.bands[3] + index, sub_3);
+                vst1q_s32(masked_pyr.bands[1] + index + 4, sub_1_2);
+                vst1q_s32(masked_pyr.bands[2] + index + 4, sub_2_2);
+                vst1q_s32(masked_pyr.bands[3] + index + 4, sub_3_2);
 
-                j+=4;
+                j+=8;
         	}                           
         }
     }
@@ -431,17 +451,15 @@ int compare(const int32_t* _x, const int32_t* _x_simd, int iwidth, int iheight, 
         for(size_t j = 0; j < iwidth; j++)
         {
             index = i*iwidth+j;
+            printf("c: %d\t neon: %d\n", _x, _x_simd);
             if(_x[index] != _x_simd[index])
             {
-                printf("mismatch element C: %u, ARM: %u, column: %ld, row: %ld, index(row*width+col): %d \n", _x[index], _x_simd[index], j, i, index);
-                count++;
-                goto label;
-               
+                printf("mismatch element C: %d, ARM: %d, column: %ld, row: %ld, index(row*width+col): %d \n", _x[index], _x_simd[index], j, i, index);
+                count++;   
             }
         }
     }
 
-    label:
     printf("total mismatches in band %d : %d\n",band, count);
     printf("total elements in band %d : %d\n",band, iheight*iwidth);
     printf("-------------\n");
