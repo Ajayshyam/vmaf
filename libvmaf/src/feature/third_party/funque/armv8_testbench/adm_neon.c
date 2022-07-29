@@ -157,8 +157,13 @@ void integer_integral_image_adm_sums(i16_adm_buffers pyr_1, uint16_t *x, int k, 
         		index = i * width + j;
         		masking_threshold = (int32_t)x[index] + sum[(i + k) * int_stride + j + k]; // x + mx
         		pyr_abs = abs((int32_t)pyr_1.bands[1][index]) * 30;
+                
         		val = pyr_abs - masking_threshold;
+                // printf("%d\n",val);
+               
         		masked_pyr.bands[1][index] = val;
+                 if(index == 100)
+                    printf("%d index: %d\n", masked_pyr.bands[1][index], index);
         		pyr_abs = abs((int32_t)pyr_1.bands[2][index]) * 30;
         		val = pyr_abs - masking_threshold;
         		masked_pyr.bands[2][index] = val;
@@ -208,6 +213,8 @@ void integer_integral_image_adm_sums(i16_adm_buffers pyr_1, uint16_t *x, int k, 
 	    		masked_pyr.bands[2][index] = (int32_t)clip(val, 0.0, val);
 	    		val = masked_pyr.bands[3][index] - masking_threshold;
 	    		masked_pyr.bands[3][index] = (int32_t)clip(val, 0.0, val);
+                if(index == 100)
+                    printf("%d index_3: %d\n", masked_pyr.bands[1][index], index);
 	    	}
 	    }
     }
@@ -398,6 +405,7 @@ void integer_integral_image_adm_sums_neon(i16_adm_buffers pyr_1, uint16_t *x, in
 	*/
     if(band_index == 3)
     {
+        int32x4_t lower  = vdupq_n_s32 (0); // do this only once before the loops
 	    for (i = 0; i < height; i++)
 	    {
 	    	for (j = 0; j < width;)
@@ -423,10 +431,10 @@ void integer_integral_image_adm_sums_neon(i16_adm_buffers pyr_1, uint16_t *x, in
                 int32x4_t sub_1 = vsubq_s32(val_1, masking_threshold);
                 int32x4_t sub_2 = vsubq_s32(val_2, masking_threshold);
                 int32x4_t sub_3 = vsubq_s32(val_3, masking_threshold);
-                int32x4_t lower  = vdupq_n_s32 (0); // do this only once before the loops
+                
                 int32x4_t x1 = vmaxq_s32 (sub_1, lower); 
-                int32x4_t x2 = vmaxq_s32 (sub_1, lower); 
-                int32x4_t x3 = vmaxq_s32 (sub_1, lower); 
+                int32x4_t x2 = vmaxq_s32 (sub_2, lower); 
+                int32x4_t x3 = vmaxq_s32 (sub_3, lower); 
                 vst1q_s32(masked_pyr.bands[1] + index, x1);
                 vst1q_s32(masked_pyr.bands[2] + index, x2);
                 vst1q_s32(masked_pyr.bands[3] + index, x3);
@@ -451,7 +459,8 @@ int compare(const int32_t* _x, const int32_t* _x_simd, int iwidth, int iheight, 
         for(size_t j = 0; j < iwidth; j++)
         {
             index = i*iwidth+j;
-            printf("c: %d\t neon: %d\n", _x, _x_simd);
+            if(index == 100)
+                printf("c: %d\t neon: %d\n", _x[index], _x_simd[index]);
             if(_x[index] != _x_simd[index])
             {
                 printf("mismatch element C: %d, ARM: %d, column: %ld, row: %ld, index(row*width+col): %d \n", _x[index], _x_simd[index], j, i, index);
