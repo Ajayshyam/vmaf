@@ -44,7 +44,9 @@ typedef int64_t adm_i64_dtype;
 
 #define SHIFT_ADM_DECOUPLE_FINAL 16
 
+#ifndef M_PI
 #define M_PI 3.1415926535897932384626433832795028841971693993751
+#endif
 #define COS_1DEG_SQ cos(1.0 * M_PI / 180.0) * cos(1.0 * M_PI / 180.0)
 
 
