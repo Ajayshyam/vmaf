@@ -34,6 +34,7 @@ typedef int64_t adm_i64_dtype;
 #define ADM_CUBE_SHIFT 8
 #define ADM_CUBE_SHIFT_ROUND (1 << (ADM_CUBE_SHIFT - 1))
 
+#define K_INTEGRALIMG_ADM 3
 #define ADM_CUBE_DIV pow(2,ADM_CUBE_SHIFT)
 
 /* Whether to use a trigonometry-free method for comparing angles. */
