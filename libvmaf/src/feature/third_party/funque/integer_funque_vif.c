@@ -21,11 +21,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
+#include "funque_profiler.h"
 #include "integer_funque_filters.h"
 #include "integer_funque_vif.h"
 #include "common/macros.h"
-#include "funque_profiler.h"
+
 #define VIF_COMPUTE_METRIC_R_SHIFT 6
 
 // just change the store offset to reduce multiple calculation when getting log value

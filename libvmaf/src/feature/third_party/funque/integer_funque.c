@@ -28,6 +28,7 @@
 #include "feature_name.h"
 #include "mem.h"
 
+#include "funque_profiler.h"
 #include "integer_funque_filters.h"
 #include "integer_funque_vif.h"
 #include "funque_vif_options.h"
@@ -37,7 +38,7 @@
 #include "integer_funque_ssim.h"
 #include "resizer.h"
 
-#include "funque_profiler.h"
+
 typedef struct IntFunqueState
 {
     size_t float_stride;
