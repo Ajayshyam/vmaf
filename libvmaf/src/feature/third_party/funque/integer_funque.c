@@ -327,6 +327,7 @@ static int extract(VmafFeatureExtractor *fex,
     struct timeval adm_start_time, adm_end_time;
     struct timeval ssim_start_time, ssim_end_time;
     double spat_time = 0;
+    double pad_time1, pad_time2;
     // start timer.
     gettimeofday(&start_time, NULL);
 #endif
@@ -463,7 +464,11 @@ static int extract(VmafFeatureExtractor *fex,
     double vif_score[MAX_VIF_LEVELS], vif_score_num[MAX_VIF_LEVELS], vif_score_den[MAX_VIF_LEVELS];
 
     err = integer_compute_vif_funque(s->i_ref_dwt2out.bands[0], s->i_dist_dwt2out.bands[0], s->i_ref_dwt2out.width, s->i_ref_dwt2out.height, 
-                    &vif_score[0], &vif_score_num[0], &vif_score_den[0], 9, 1, (double)5.0, (int16_t) pending_div_factor, s->log_18);
+                    &vif_score[0], &vif_score_num[0], &vif_score_den[0], 9, 1, (double)5.0, (int16_t) pending_div_factor, s->log_18 
+#if PROFILE_IND_MODULES
+                    , &pad_time1
+#endif
+                    );
     if (err) return err;
 
     int vifdwt_stride = (s->i_dwt2_stride + 1)/2;
@@ -483,7 +488,11 @@ static int extract(VmafFeatureExtractor *fex,
         vifdwt_height = (vifdwt_height + 1)/2;
 
         err = integer_compute_vif_funque(s->i_ref_dwt2out.bands[vif_level], s->i_dist_dwt2out.bands[vif_level], vifdwt_width, vifdwt_height, 
-                                    &vif_score[vif_level], &vif_score_num[vif_level], &vif_score_den[vif_level], 9, 1, (double)5.0, (int16_t) vif_pending_div, s->log_18);        
+                                    &vif_score[vif_level], &vif_score_num[vif_level], &vif_score_den[vif_level], 9, 1, (double)5.0, (int16_t) vif_pending_div, s->log_18
+#if PROFILE_IND_MODULES
+                    , &pad_time2
+#endif
+                    );        
         if (err) return err;
     }
 
@@ -521,7 +530,7 @@ static int extract(VmafFeatureExtractor *fex,
     {
         printf("frame_num,time_taken");
 #if PROFILE_IND_MODULES
-        printf(",resize,pre_filters,spatial_filter,motion,vif,adm,ssim");
+        printf(",resize,pre_filters,spatial_filter,motion,vif,adm,ssim,vifpad1,vifpad2");
 #endif
         printf("\n");
     }
@@ -541,7 +550,7 @@ static int extract(VmafFeatureExtractor *fex,
     ssim_time     = ((ssim_end_time.tv_sec - ssim_start_time.tv_sec) * 1e6 +
                     (ssim_end_time.tv_usec - ssim_start_time.tv_usec)) * 1e-6;
 
-    printf(",%f,%f,%f,%f,%f,%f,%f", resize_time, pre_filt_time, spat_time, motion_time, vif_time, adm_time, ssim_time);
+    printf(",%f,%f,%f,%f,%f,%f,%f", resize_time, pre_filt_time, spat_time, motion_time, vif_time, adm_time, ssim_time, pad_time1, pad_time2);
 #endif
     printf("\n");
 #endif

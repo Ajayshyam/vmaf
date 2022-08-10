@@ -25,7 +25,7 @@
 #include "integer_funque_filters.h"
 #include "integer_funque_vif.h"
 #include "common/macros.h"
-
+#include "funque_profiler.h"
 #define VIF_COMPUTE_METRIC_R_SHIFT 6
 
 // just change the store offset to reduce multiple calculation when getting log value
@@ -261,7 +261,11 @@ static inline vif_horz_integralsum(int kw, int width_p1,
 
 }
 
-int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, size_t width, size_t height, double* score, double* score_num, double* score_den, int k, int stride, double sigma_nsq, int64_t shift_val, uint32_t* log_18)
+int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, size_t width, size_t height, double* score, double* score_num, double* score_den, int k, int stride, double sigma_nsq, int64_t shift_val, uint32_t* log_18
+#if PROFILE_IND_MODULES
+                                    , double *pad_time
+#endif
+                                )
 {
     int ret = 1;
 
@@ -281,9 +285,21 @@ int integer_compute_vif_funque(const dwt2_dtype* x_t, const dwt2_dtype* y_t, siz
     dwt2_dtype* x_pad_t, *y_pad_t;
     x_pad_t = (dwt2_dtype*)malloc(sizeof(dwt2_dtype*) * (width + (2 * x_reflect)) * (height + (2 * x_reflect)));
     y_pad_t = (dwt2_dtype*)malloc(sizeof(dwt2_dtype*) * (width + (2 * y_reflect)) * (height + (2 * y_reflect)));
+#if PROFILE_IND_MODULES
+    struct timeval start_time, end_time;
+    // start timer.
+    gettimeofday(&start_time, NULL);
+#endif
     integer_reflect_pad(x_t, width, height, x_reflect, x_pad_t);
     integer_reflect_pad(y_t, width, height, y_reflect, y_pad_t);
-
+#if PROFILE_IND_MODULES
+    gettimeofday(&end_time, NULL);
+    double time_taken;
+    time_taken = (end_time.tv_sec - start_time.tv_sec) * 1e6;
+    time_taken = (time_taken + (end_time.tv_usec - 
+                              start_time.tv_usec)) * 1e-6;
+    *pad_time = time_taken;
+#endif
     int32_t int_1_x, int_1_y;
     int64_t int_2_x, int_2_y, int_x_y;
 
