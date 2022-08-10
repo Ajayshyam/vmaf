@@ -551,7 +551,7 @@ static int extract(VmafFeatureExtractor *fex,
     ssim_time     = ((ssim_end_time.tv_sec - ssim_start_time.tv_sec) * 1e6 +
                     (ssim_end_time.tv_usec - ssim_start_time.tv_usec)) * 1e-6;
 
-    printf(",%f,%f,%f,%f,%f,%f,%f", resize_time, pre_filt_time, spat_time, motion_time, vif_time, adm_time, ssim_time, pad_time1, pad_time2);
+    printf(",%f,%f,%f,%f,%f,%f,%f,%f,%f", resize_time, pre_filt_time, spat_time, motion_time, vif_time, adm_time, ssim_time, pad_time1, pad_time2);
 #endif
     printf("\n");
 #endif
