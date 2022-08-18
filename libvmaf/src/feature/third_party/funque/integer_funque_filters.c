@@ -294,7 +294,7 @@ static inline void integer_horizontal_filter(spat_fil_inter_dtype *tmp, spat_fil
 
 }
 
-void integer_spatial_filter(uint8_t *src, spat_fil_output_dtype *dst, int width, int height)
+void integer_spatial_filter(void *src, spat_fil_output_dtype *dst, int width, int height, int bitdepth)
 {
 
     const spat_fil_coeff_dtype i_filter_coeffs[21] = {
@@ -307,11 +307,30 @@ void integer_spatial_filter(uint8_t *src, spat_fil_output_dtype *dst, int width,
 
     spat_fil_inter_dtype *tmp = aligned_malloc(ALIGN_CEIL(src_px_stride * sizeof(spat_fil_inter_dtype)), MAX_ALIGN);
     spat_fil_inter_dtype imgcoeff;
+	uint8_t *src_8b = NULL;
+	uint16_t *src_hbd = NULL;
+	
+	int interim_rnd = 0, interim_shift = 0;
 
     int i, j, fi, fj, ii, jj, jj1, jj2, ii1, ii2;
     spat_fil_coeff_dtype *coeff_ptr;
     int fwidth = 21;
     int half_fw = fwidth / 2;
+	
+	if(8 == bitdepth)
+	{
+		src_8b = (uint8_t*)src;
+		src_hbd = NULL;
+		interim_rnd = SPAT_FILTER_INTER_RND;
+		interim_shift = SPAT_FILTER_INTER_SHIFT;
+	}
+	else // HBD case
+	{
+		src_8b = NULL;
+		src_hbd = (uint16_t*)src;		
+		interim_shift = SPAT_FILTER_INTER_SHIFT + (bitdepth - 8);
+		interim_rnd = (1 << (interim_shift - 1));
+	}
 
     /**
      * The loop i=0 to height is split into 3 parts
@@ -323,32 +342,63 @@ void integer_spatial_filter(uint8_t *src, spat_fil_output_dtype *dst, int width,
         int pro_mir_end = -diff_i_halffw - 1;
 
         /* Vertical pass. */
-        for (j = 0; j < width; j++){
+		if(8 == bitdepth)
+		{
+			for (j = 0; j < width; j++){
 
-            spat_fil_accum_dtype accum = 0;
+				spat_fil_accum_dtype accum = 0;
 
-            /**
-             * The full loop is from fi = 0 to fwidth
-             * During the loop when the centre pixel is at i, 
-             * the top part is available only till i-(fwidth/2) >= 0, 
-             * hence padding (border mirroring) is required when i-fwidth/2 < 0
-             */
-            //This loop does border mirroring (ii = -(i - fwidth/2 + fi + 1))
-            for (fi = 0; fi <= pro_mir_end; fi++){
+				/**
+				 * The full loop is from fi = 0 to fwidth
+				 * During the loop when the centre pixel is at i, 
+				 * the top part is available only till i-(fwidth/2) >= 0, 
+				 * hence padding (border mirroring) is required when i-fwidth/2 < 0
+				 */
+				//This loop does border mirroring (ii = -(i - fwidth/2 + fi + 1))
+				for (fi = 0; fi <= pro_mir_end; fi++){
 
-                ii = pro_mir_end - fi;
-                accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src[ii * src_px_stride + j];
-            }
-            //Here the normal loop is executed where ii = i - fwidth / 2 + fi
-            for ( ; fi < fwidth; fi++)
-            {
-                ii = diff_i_halffw + fi;
-                accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src[ii * src_px_stride + j];
-            }
-            tmp[j] = (spat_fil_inter_dtype) ((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
-        }
+					ii = pro_mir_end - fi;
+					accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_8b[ii * src_px_stride + j];
+				}
+				//Here the normal loop is executed where ii = i - fwidth / 2 + fi
+				for ( ; fi < fwidth; fi++)
+				{
+					ii = diff_i_halffw + fi;
+					accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_8b[ii * src_px_stride + j];
+				}
+				tmp[j] = (spat_fil_inter_dtype) ((accum + interim_rnd) >> interim_shift);
+			}
+		}
+		else
+		{
+			for (j = 0; j < width; j++)
+			{
 
-        /* Horizontal pass. */
+				spat_fil_accum_dtype accum = 0;
+
+				/**
+				 * The full loop is from fi = 0 to fwidth
+				 * During the loop when the centre pixel is at i, 
+				 * the top part is available only till i-(fwidth/2) >= 0, 
+				 * hence padding (border mirroring) is required when i-fwidth/2 < 0
+				 */
+				//This loop does border mirroring (ii = -(i - fwidth/2 + fi + 1))
+				for (fi = 0; fi <= pro_mir_end; fi++){
+
+					ii = pro_mir_end - fi;
+					accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_hbd[ii * src_px_stride + j];
+				}
+				//Here the normal loop is executed where ii = i - fwidth / 2 + fi
+				for ( ; fi < fwidth; fi++)
+				{
+					ii = diff_i_halffw + fi;
+					accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_hbd[ii * src_px_stride + j];
+				}
+				tmp[j] = (spat_fil_inter_dtype) ((accum + interim_rnd) >> interim_shift);
+			}
+		}
+
+        /* Horizontal pass. common for 8bit and hbd cases */
         integer_horizontal_filter(tmp, dst, i_filter_coeffs, width, height, fwidth, i*dst_px_stride, half_fw);
     }
     //This is the core loop
@@ -357,25 +407,49 @@ void integer_spatial_filter(uint8_t *src, spat_fil_output_dtype *dst, int width,
         int f_l_i = i - half_fw;
         int f_r_i = i + half_fw;
         /* Vertical pass. */
-        for (j = 0; j < width; j++){
+		if(8 == bitdepth)
+		{
+			for (j = 0; j < width; j++){
 
-            spat_fil_accum_dtype accum = 0;
+				spat_fil_accum_dtype accum = 0;
 
-            /**
-             * The filter coefficients are symmetric, 
-             * hence the corresponding pixels for whom coefficient values would be same are added first & then multiplied by coeff
-             * The centre pixel is multiplied and accumulated outside the loop
-            */
-            for (fi = 0; fi < (half_fw); fi++){
-                ii1 = f_l_i + fi;
-                ii2 = f_r_i - fi;
-                accum += i_filter_coeffs[fi] * ((spat_fil_inter_dtype)src[ii1 * src_px_stride + j] + src[ii2 * src_px_stride + j]);
-            }
-            accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src[i * src_px_stride + j];
-            tmp[j] = (spat_fil_inter_dtype) ((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
-        }
+				/**
+				 * The filter coefficients are symmetric, 
+				 * hence the corresponding pixels for whom coefficient values would be same are added first & then multiplied by coeff
+				 * The centre pixel is multiplied and accumulated outside the loop
+				*/
+				for (fi = 0; fi < (half_fw); fi++){
+					ii1 = f_l_i + fi;
+					ii2 = f_r_i - fi;
+					accum += i_filter_coeffs[fi] * ((spat_fil_inter_dtype)src_8b[ii1 * src_px_stride + j] + src_8b[ii2 * src_px_stride + j]);
+				}
+				accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_8b[i * src_px_stride + j];
+				tmp[j] = (spat_fil_inter_dtype) ((accum + interim_rnd) >> interim_shift);
+			}
+		}
+		else
+		{
+			for (j = 0; j < width; j++){
 
-        /* Horizontal pass. */
+				spat_fil_accum_dtype accum = 0;
+
+				/**
+				 * The filter coefficients are symmetric, 
+				 * hence the corresponding pixels for whom coefficient values would be same are added first & then multiplied by coeff
+				 * The centre pixel is multiplied and accumulated outside the loop
+				*/
+				for (fi = 0; fi < (half_fw); fi++){
+					ii1 = f_l_i + fi;
+					ii2 = f_r_i - fi;
+					accum += i_filter_coeffs[fi] * ((spat_fil_inter_dtype)src_hbd[ii1 * src_px_stride + j] + src_hbd[ii2 * src_px_stride + j]);
+				}
+				accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_hbd[i * src_px_stride + j];
+				tmp[j] = (spat_fil_inter_dtype) ((accum + interim_rnd) >> interim_shift);
+			}
+			
+		}
+
+        /* Horizontal pass. common for 8bit and hbd cases */
         integer_horizontal_filter(tmp, dst, i_filter_coeffs, width, height, fwidth, i*dst_px_stride, half_fw);
     }
     /**
@@ -388,32 +462,63 @@ void integer_spatial_filter(uint8_t *src, spat_fil_output_dtype *dst, int width,
         int epi_last_i  = height - diff_i_halffw;
         
         /* Vertical pass. */
-        for (j = 0; j < width; j++){
+		if(8 == bitdepth)
+		{
+			for (j = 0; j < width; j++){
 
-            spat_fil_accum_dtype accum = 0;
+				spat_fil_accum_dtype accum = 0;
 
-            /**
-             * The full loop is from fi = 0 to fwidth
-             * During the loop when the centre pixel is at i, 
-             * the bottom pixels are available only till i+(fwidth/2) < height, 
-             * hence padding (border mirroring) is required when i+(fwidth/2) >= height
-             */
-            //Here the normal loop is executed where ii = i - fwidth/2 + fi
-            for (fi = 0; fi < epi_last_i; fi++){
+				/**
+				 * The full loop is from fi = 0 to fwidth
+				 * During the loop when the centre pixel is at i, 
+				 * the bottom pixels are available only till i+(fwidth/2) < height, 
+				 * hence padding (border mirroring) is required when i+(fwidth/2) >= height
+				 */
+				//Here the normal loop is executed where ii = i - fwidth/2 + fi
+				for (fi = 0; fi < epi_last_i; fi++){
 
-                ii = diff_i_halffw + fi;
-                accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src[ii * src_px_stride + j];
-            }
-            //This loop does border mirroring (ii = 2*height - (i - fwidth/2 + fi) - 1)
-            for ( ; fi < fwidth; fi++)
-            {
-                ii = epi_mir_i - fi;
-                accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src[ii * src_px_stride + j];
-            }
-            tmp[j] = (spat_fil_inter_dtype) ((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
-        }
+					ii = diff_i_halffw + fi;
+					accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_8b[ii * src_px_stride + j];
+				}
+				//This loop does border mirroring (ii = 2*height - (i - fwidth/2 + fi) - 1)
+				for ( ; fi < fwidth; fi++)
+				{
+					ii = epi_mir_i - fi;
+					accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_8b[ii * src_px_stride + j];
+				}
+				tmp[j] = (spat_fil_inter_dtype) ((accum + interim_rnd) >> interim_shift);
+			}
+		}
+		else
+		{
+			for (j = 0; j < width; j++){
 
-        /* Horizontal pass. */
+				spat_fil_accum_dtype accum = 0;
+
+				/**
+				 * The full loop is from fi = 0 to fwidth
+				 * During the loop when the centre pixel is at i, 
+				 * the bottom pixels are available only till i+(fwidth/2) < height, 
+				 * hence padding (border mirroring) is required when i+(fwidth/2) >= height
+				 */
+				//Here the normal loop is executed where ii = i - fwidth/2 + fi
+				for (fi = 0; fi < epi_last_i; fi++){
+
+					ii = diff_i_halffw + fi;
+					accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_hbd[ii * src_px_stride + j];
+				}
+				//This loop does border mirroring (ii = 2*height - (i - fwidth/2 + fi) - 1)
+				for ( ; fi < fwidth; fi++)
+				{
+					ii = epi_mir_i - fi;
+					accum += (spat_fil_inter_dtype) i_filter_coeffs[fi] * src_hbd[ii * src_px_stride + j];
+				}
+				tmp[j] = (spat_fil_inter_dtype) ((accum + interim_rnd) >> interim_shift);
+			}
+			
+		}
+
+        /* Horizontal pass. common for 8bit and hbd cases */
         integer_horizontal_filter(tmp, dst, i_filter_coeffs, width, height, fwidth, i*dst_px_stride, half_fw);
     }
 

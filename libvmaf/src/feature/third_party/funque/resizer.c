@@ -20,21 +20,11 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#if ARCH_AARCH64
+#include <arm_neon.h>
+#endif
 
-
-const int INTER_RESIZE_COEF_BITS = 11;
-// const int INTER_RESIZE_COEF_SCALE = 1 << INTER_RESIZE_COEF_BITS;
-const int INTER_RESIZE_COEF_SCALE = 2048;
-static const int MAX_ESIZE = 16;
-
-#define CLIP3(X,MIN,MAX) ((X < MIN) ? MIN : (X > MAX) ? MAX : X)
-#define MAX(LEFT, RIGHT) (LEFT > RIGHT ? LEFT : RIGHT)
-#define MIN(LEFT, RIGHT) (LEFT < RIGHT ? LEFT : RIGHT)
-
-// enabled by default for funque since resize factor is always 0.5, disabled otherwise
-#define OPTIMISED_COEFF 1
-
-#define USE_C_VRESIZE 0
+#include "resizer.h"
 
 #if !OPTIMISED_COEFF
 static void interpolateCubic(float x, float *coeffs)
@@ -47,7 +37,6 @@ static void interpolateCubic(float x, float *coeffs)
     coeffs[3] = 1.f - coeffs[0] - coeffs[1] - coeffs[2];
 }
 #endif
-
 
 void hresize(const unsigned char **src, int **dst, int count,
              const int *xofs, const short *alpha,
@@ -154,7 +143,6 @@ void step(const unsigned char *_src, unsigned char *_dst, const int *xofs, const
     const short *beta = _beta + ksize * start;
 #endif
 
-
 #if OPTIMISED_COEFF
     for (dy = start; dy < end; dy++)
     {
@@ -190,6 +178,7 @@ void step(const unsigned char *_src, unsigned char *_dst, const int *xofs, const
                     iwidth, dwidth, cn, xmin, xmax);
         }
 
+        // regular c
 #if OPTIMISED_COEFF
         vresize((const int **)rows, (_dst + dwidth * dy), _beta, dwidth);
 #else
@@ -199,7 +188,7 @@ void step(const unsigned char *_src, unsigned char *_dst, const int *xofs, const
     free(_buffer);
 }
 
-void resize(const unsigned char *_src, unsigned char *_dst, int iwidth, int iheight, int dwidth, int dheight)
+void resize(ResizerState m, const unsigned char *_src, unsigned char *_dst, int iwidth, int iheight, int dwidth, int dheight)
 {
     int depth = 0, cn = 1;
     double inv_scale_x = (double)dwidth / iwidth;
@@ -275,6 +264,7 @@ void resize(const unsigned char *_src, unsigned char *_dst, int iwidth, int ihei
             xofs[dx * cn + k] = sx + k;
 
         interpolateCubic(fx, cbuf);
+
         for (k = 0; k < ksize; k++)
             ialpha[dx * cn * ksize + k] = (short)(cbuf[k] * INTER_RESIZE_COEF_SCALE);
         for (; k < cn * ksize; k++)
@@ -290,10 +280,11 @@ void resize(const unsigned char *_src, unsigned char *_dst, int iwidth, int ihei
         yofs[dy] = sy;
 
         interpolateCubic(fy, cbuf);
+
         for (k = 0; k < ksize; k++)
             ibeta[dy * ksize + k] = (short)(cbuf[k] * INTER_RESIZE_COEF_SCALE);
     }
 #endif
-
-    step(_src, _dst, xofs, yofs, ialpha, ibeta, iwidth, iheight, dwidth, dheight, cn, ksize, 0, dheight, xmin, xmax);
+    
+    m.resizer_step(_src, _dst, xofs, yofs, ialpha, ibeta, iwidth, iheight, dwidth, dheight, cn, ksize, 0, dheight, xmin, xmax);
 }
