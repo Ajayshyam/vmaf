@@ -31,11 +31,11 @@
 void funque_log_generate(uint32_t* log_18)
 {
     uint64_t i;
-    uint64_t start = (unsigned int)pow(2, 17);
-    uint64_t end = (unsigned int)pow(2, 18);
+    uint64_t start = (unsigned int)pow(2, 15);
+    uint64_t end = (unsigned int)pow(2, 16);
 	for (i = start; i < end; i++)
     {
-		log_18[i] = (uint32_t)round(log2((double)i) * (1 << 26));
+		log_18[i] = (uint32_t)round(log2((double)i) * (1 << 27));
     }
 }
 
@@ -237,8 +237,8 @@ int integer_compute_vif_funque_c(const dwt2_dtype* x_t, const dwt2_dtype* y_t, s
     double power_double_num = (double)num_power;
     double power_double_den = (double)den_power;
 
-    *score_num = (((double)score_num_t/(double)(1<<26)) + power_double_num) + add_exp;
-    *score_den = (((double)score_den_t/(double)(1<<26)) + power_double_den) + add_exp;
+    *score_num = (((double)score_num_t/(double)(1<<27)) + power_double_num) + add_exp;
+    *score_den = (((double)score_den_t/(double)(1<<27)) + power_double_den) + add_exp;
     *score = *score_num / *score_den;
 
 #if VIF_REFLECT_PAD

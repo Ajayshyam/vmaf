@@ -31,7 +31,7 @@ static inline uint32_t get_best_u18_from_u64(uint64_t temp, int *power)
 {
     assert(temp >= 0x40000);
     int k = __builtin_clzll(temp);
-    k = 46 - k;
+    k = 48 - k;
     temp = temp >> k;
     *power = k;
     return (uint32_t) temp;
