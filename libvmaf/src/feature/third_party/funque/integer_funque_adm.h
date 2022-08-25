@@ -21,6 +21,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
@@ -64,10 +65,9 @@ typedef struct u_adm_buffers
 #endif
 #define COS_1DEG_SQ cos(1.0 * M_PI / 180.0) * cos(1.0 * M_PI / 180.0)
 
-void integer_reflect_pad_adm(const adm_u16_dtype *src, size_t width, size_t height, int reflect, adm_u16_dtype *dest);
 int integer_compute_adm_funque(ModuleFunqueState m, i_dwt2buffers ref, i_dwt2buffers dist, double *adm_score, 
                                double *adm_score_num, double *adm_score_den, size_t width, size_t height, 
-                               float border_size, int16_t shift_val, int32_t* adm_div_lookup);
+                               float border_size, int32_t* adm_div_lookup);
 void integer_adm_decouple_c(i_dwt2buffers ref, i_dwt2buffers dist, 
                           i_dwt2buffers i_dlm_rest, adm_i32_dtype *i_dlm_add, 
                           int32_t *adm_div_lookup, float border_size, double *adm_score_den);
@@ -76,10 +76,10 @@ void integer_adm_integralimg_numscore_c(i_dwt2buffers pyr_1, int32_t *x_pad, int
                                      adm_i32_dtype *interim_x, float border_size, double *adm_score_num);
 void div_lookup_generator(int32_t* adm_div_lookup);
 
-static inline adm_horz_integralsum(int row_offset, int k, size_t r_width_p1, 
+static inline void adm_horz_integralsum(int k, size_t r_width_p1, 
                                    int64_t *num_sum, adm_i32_dtype *interim_x, 
                                    int32_t *x_pad, int xpad_i, int index, 
-                                   i_dwt2buffers pyr_1, int extra_sample_w)
+                                   i_dwt2buffers pyr_1)
 {
     int32_t interim_sum = 0;
     adm_i32_dtype masking_threshold;
@@ -94,7 +94,7 @@ static inline adm_horz_integralsum(int row_offset, int k, size_t r_width_p1,
      * sum = prev_col_sum + interim_vertical_sum
      * The previous k col interim sum is not subtracted since it is not available here
      */
-    for (size_t j=1; j<k+1; j++)
+    for (int j=1; j<k+1; j++)
     {
         interim_sum = interim_sum + interim_x[j];
     }

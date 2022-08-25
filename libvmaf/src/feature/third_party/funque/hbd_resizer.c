@@ -20,11 +20,19 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#if ARCH_AARCH64
-#include <arm_neon.h>
-#endif
 
-#include "resizer.h"
+const int HBD_INTER_RESIZE_COEF_SCALE = 2048;
+static const int HBD_MAX_ESIZE = 16;
+
+#define CLIP3(X, MIN, MAX) ((X < MIN) ? MIN : (X > MAX) ? MAX \
+                                                        : X)
+#define MAX(LEFT, RIGHT) (LEFT > RIGHT ? LEFT : RIGHT)
+#define MIN(LEFT, RIGHT) (LEFT < RIGHT ? LEFT : RIGHT)
+
+// enabled by default for funque since resize factor is always 0.5, disabled otherwise
+#define OPTIMISED_COEFF 1
+
+#define USE_C_VRESIZE 0
 
 #if !OPTIMISED_COEFF
 static void interpolateCubic(float x, float *coeffs)
@@ -39,18 +47,18 @@ static void interpolateCubic(float x, float *coeffs)
 #endif
 
 #if OPTIMISED_COEFF
-void hresize(const unsigned char **src, int **dst, int count,
-             const short *alpha,
-             int swidth, int dwidth, int cn, int xmin, int xmax)
+void hbd_hresize(const unsigned short **src, int **dst, int count,
+                 const short *alpha,
+                 int swidth, int dwidth, int cn, int xmin, int xmax)
 #else
-void hresize(const unsigned char **src, int **dst, int count,
-             const int *xofs, const short *alpha,
-             int swidth, int dwidth, int cn, int xmin, int xmax)
+void hbd_hresize(const unsigned short **src, int **dst, int count,
+                 const int *xofs, const short *alpha,
+                 int swidth, int dwidth, int cn, int xmin, int xmax)
 #endif
 {
     for (int k = 0; k < count; k++)
     {
-        const unsigned char *S = src[k];
+        const unsigned short *S = src[k];
         int *D = dst[k];
         int dx = 0, limit = xmin;
         for (;;)
@@ -102,32 +110,32 @@ void hresize(const unsigned char **src, int **dst, int count,
     }
 }
 
-unsigned char castOp(int val)
+unsigned short hbd_castOp(int64_t val, int bitdepth)
 {
     int bits = 22;
     int SHIFT = bits;
     int DELTA = (1 << (bits - 1));
-    return CLIP3((val + DELTA) >> SHIFT, 0, 255);
+    return CLIP3((val + DELTA) >> SHIFT, 0, ((1 << bitdepth) - 1));
 }
 
-void vresize(const int **src, unsigned char *dst, const short *beta, int width)
+static int hbd_clip(int x, int a, int b)
+{
+    return x >= a ? (x < b ? x : b - 1) : a;
+}
+
+void hbd_vresize(const int **src, unsigned short *dst, const short *beta, int width, int bitdepth)
 {
     int b0 = beta[0], b1 = beta[1], b2 = beta[2], b3 = beta[3];
     const int *S0 = src[0], *S1 = src[1], *S2 = src[2], *S3 = src[3];
 
     for (int x = 0; x < width; x++)
-        dst[x] = castOp(S0[x] * b0 + S1[x] * b1 + S2[x] * b2 + S3[x] * b3);
-}
-
-static int clip(int x, int a, int b)
-{
-    return x >= a ? (x < b ? x : b - 1) : a;
+        dst[x] = hbd_castOp((int64_t)S0[x] * b0 + (int64_t)S1[x] * b1 + (int64_t)S2[x] * b2 + (int64_t)S3[x] * b3, bitdepth);
 }
 
 #if OPTIMISED_COEFF
-void step(const unsigned char *_src, unsigned char *_dst, const short *_alpha, const short *_beta, int iwidth, int iheight, int dwidth, int channels, int ksize, int start, int end, int xmin, int xmax)
+void hbd_step(const unsigned short *_src, unsigned short *_dst, const short *_alpha, const short *_beta, int iwidth, int iheight, int dwidth, int channels, int ksize, int start, int end, int xmin, int xmax, int bitdepth)
 #else
-void step(const unsigned char *_src, unsigned char *_dst, const int *xofs, const int *yofs, const short *_alpha, const short *_beta, int iwidth, int iheight, int dwidth, int dheight, int channels, int ksize, int start, int end, int xmin, int xmax)
+void hbd_step(const unsigned short *_src, unsigned short *_dst, const int *xofs, const int *yofs, const short *_alpha, const short *_beta, int iwidth, int iheight, int dwidth, int dheight, int channels, int ksize, int start, int end, int xmin, int xmax, int bitdepth)
 #endif
 {
     int dy, cn = channels;
@@ -139,9 +147,9 @@ void step(const unsigned char *_src, unsigned char *_dst, const int *xofs, const
         printf("resizer: malloc fails\n");
         return;
     }
-    const unsigned char *srows[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    const unsigned short *srows[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     int *rows[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    int prev_sy[MAX_ESIZE];
+    int prev_sy[HBD_MAX_ESIZE];
 
     for (int k = 0; k < ksize; k++)
     {
@@ -166,10 +174,10 @@ void step(const unsigned char *_src, unsigned char *_dst, const int *xofs, const
 
         for (int k = 0; k < ksize; k++)
         {
-            int sy = clip(sy0 - ksize2 + 1 + k, 0, iheight);
+            int sy = hbd_clip(sy0 - ksize2 + 1 + k, 0, iheight);
             for (k1 = MAX(k1, k); k1 < ksize; k1++)
             {
-                if (k1 < MAX_ESIZE && sy == prev_sy[k1]) // if the sy-th row has been computed already, reuse it.
+                if (k1 < HBD_MAX_ESIZE && sy == prev_sy[k1]) // if the sy-th row has been computed already, reuse it.
                 {
                     if (k1 > k)
                         memcpy(rows[k], rows[k1], bufstep * sizeof(rows[0][0]));
@@ -184,35 +192,35 @@ void step(const unsigned char *_src, unsigned char *_dst, const int *xofs, const
 
         
 
-        // regular c
 #if OPTIMISED_COEFF
         if (k0 < ksize)
         {
-            hresize((srows + k0), (rows + k0), ksize - k0, _alpha,
-                    iwidth, dwidth, cn, xmin, xmax);
+            hbd_hresize((srows + k0), (rows + k0), ksize - k0, _alpha,
+                        iwidth, dwidth, cn, xmin, xmax);
         }
-        vresize((const int **)rows, (_dst + dwidth * dy), _beta, dwidth);
+        hbd_vresize((const int **)rows, (_dst + dwidth * dy), _beta, dwidth, bitdepth);
 #else
         if (k0 < ksize)
         {
-            hresize((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
-                    iwidth, dwidth, cn, xmin, xmax);
+            hbd_hresize((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
+                        iwidth, dwidth, cn, xmin, xmax);
         }
-        vresize((const int **)rows, (_dst + dwidth * dy), beta, dwidth);
+        hbd_vresize((const int **)rows, (_dst + dwidth * dy), beta, dwidth, bitdepth);
 #endif
     }
     free(_buffer);
 }
 
-void resize(ResizerState m, const unsigned char *_src, unsigned char *_dst, int iwidth, int iheight, int dwidth, int dheight)
+void hbd_resize(const unsigned short *_src, unsigned short *_dst, int iwidth, int iheight, int dwidth, int dheight, int bitdepth)
 {
     // int depth = 0;
     int cn = 1;
     double inv_scale_x = (double)dwidth / iwidth;
+
     int ksize = 4, ksize2;
     ksize2 = ksize / 2;
 
-    int xmin = 0, xmax = dwidth; 
+    int xmin = 0, xmax = dwidth;
 
 #if OPTIMISED_COEFF
     const short ibeta[] = {-192, 1216, 1216, -192};
@@ -237,12 +245,12 @@ void resize(ResizerState m, const unsigned char *_src, unsigned char *_dst, int 
             xmax = MIN(xmax, dx);
         }
     }
-    m.resizer_step(_src, _dst, ialpha, ibeta, iwidth, iheight, dwidth, cn, ksize, 0, dheight, xmin, xmax);
+    hbd_step(_src, _dst, ialpha, ibeta, iwidth, iheight, dwidth, cn, ksize, 0, dheight, xmin, xmax, bitdepth);
+
 #else
     double inv_scale_y = (double)dheight / iheight;
     double scale_x = 1. / inv_scale_x, scale_y = 1. / inv_scale_y;
-
-    int width = dwidth * cn;
+    width = dwidth * cn;
 
     int iscale_x = (int)scale_x;
     int iscale_y = (int)scale_y;
@@ -251,7 +259,7 @@ void resize(ResizerState m, const unsigned char *_src, unsigned char *_dst, int 
 
     float fx, fy;
 
-    unsigned char *_buffer = (unsigned char *)malloc((width + dheight) * (sizeof(int) + sizeof(float) * ksize));
+    unsigned short *_buffer = (unsigned short *)malloc((width + dheight) * (sizeof(int) + sizeof(float) * ksize));
 
     int *xofs = (int *)_buffer;
     int *yofs = xofs + width;
@@ -281,9 +289,8 @@ void resize(ResizerState m, const unsigned char *_src, unsigned char *_dst, int 
             xofs[dx * cn + k] = sx + k;
 
         interpolateCubic(fx, cbuf);
-
         for (k = 0; k < ksize; k++)
-            ialpha[dx * cn * ksize + k] = (short)(cbuf[k] * INTER_RESIZE_COEF_SCALE);
+            ialpha[dx * cn * ksize + k] = (short)(cbuf[k] * HBD_INTER_RESIZE_COEF_SCALE);
         for (; k < cn * ksize; k++)
             ialpha[dx * cn * ksize + k] = ialpha[dx * cn * ksize + k - ksize];
     }
@@ -297,12 +304,10 @@ void resize(ResizerState m, const unsigned char *_src, unsigned char *_dst, int 
         yofs[dy] = sy;
 
         interpolateCubic(fy, cbuf);
-
         for (k = 0; k < ksize; k++)
-            ibeta[dy * ksize + k] = (short)(cbuf[k] * INTER_RESIZE_COEF_SCALE);
+            ibeta[dy * ksize + k] = (short)(cbuf[k] * HBD_INTER_RESIZE_COEF_SCALE);
     }
-    m.resizer_step(_src, _dst, xofs, yofs, ialpha, ibeta, iwidth, iheight, dwidth, dheight, cn, ksize, 0, dheight, xmin, xmax);
+    hbd_step(_src, _dst, xofs, yofs, ialpha, ibeta, iwidth, iheight, dwidth, dheight, cn, ksize, 0, dheight, xmin, xmax, bitdepth);
 #endif
-    
-    
+
 }

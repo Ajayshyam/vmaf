@@ -1,10 +1,6 @@
-
-#include "../integer_funque_filters.h"
 #include <arm_neon.h>
 #include <math.h>
-#include <stdlib.h>
-
-// #define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#include "integer_funque_ssim_armv7.h"
 
 static inline int16_t ssim_get_best_i16_from_u64(uint64_t temp, int *power)
 {
@@ -15,11 +11,11 @@ static inline int16_t ssim_get_best_i16_from_u64(uint64_t temp, int *power)
     return (int16_t)temp;
 }
 
-int integer_compute_ssim_funque_neon(i_dwt2buffers *ref, i_dwt2buffers *dist, double *score, int max_val, float K1, float K2, int pending_div, int32_t *div_lookup)
+int integer_compute_ssim_funque_armv7(i_dwt2buffers *ref, i_dwt2buffers *dist, double *score, int max_val, float K1, float K2, int pending_div, int32_t *div_lookup)
 {
     int ret = 1;
-    int width = ref->width;
-    int height = ref->height;
+    size_t width = ref->width;
+    size_t height = ref->height;
 
     dwt2_dtype mx, my;
     ssim_inter_dtype var_x, var_y, cov_xy, var_x_band0, var_y_band0, cov_xy_band0;
@@ -32,9 +28,7 @@ int integer_compute_ssim_funque_neon(i_dwt2buffers *ref, i_dwt2buffers *dist, do
     int index = 0, i, j, k;
     int16_t i16_map_den;
 
-    int16x8_t ref16x8_b0, dist16x8_b0, ref16x8_b1, dist16x8_b1;
-    int16x8_t ref16x8_b2, dist16x8_b2, ref16x8_b3, dist16x8_b3;
-    int16x4_t tmpRef16x8_low, tmpDist16x8_low;
+    int16x4_t ref16x4_low, dist16x4_low, ref16x4_high, dist16x4_high;
     int32x4_t var32x4_lb0, var32x4_hb0, cov32x4_lb0, cov32x4_hb0;
     int32x4_t lDen32x4_lb0, lDen32x4_hb0, csDen32x4_lb1, csDen32x4_hb1;
     int32x4_t addlNum32x4_lb0, addlNum32x4_hb0, addlDen32x4_lb0, addlDen32x4_hb0;
@@ -46,26 +40,28 @@ int integer_compute_ssim_funque_neon(i_dwt2buffers *ref, i_dwt2buffers *dist, do
     int32x4_t dupC1 = vdupq_n_s32(C1);
     int32x4_t dupC2 = vdupq_n_s32(C2);
 
-    int64_t *numVal = (int64_t *)malloc(width * sizeof(int64_t *));
-    int64_t *denVal = (int64_t *)malloc(width * sizeof(int64_t *));
+//    int64_t *numVal = (int64_t *)malloc(width * sizeof(int64_t *));
+//    int64_t *denVal = (int64_t *)malloc(width * sizeof(int64_t *));
+
+    int64_t numVal[width];
+    int64_t denVal[width];
 
     for (i = 0; i < height; i++)
     {
         for (j = 0; j <= width - 8; j += 8)
         {
             index = i * width + j;
-            ref16x8_b0 = vld1q_s16(ref->bands[0] + index);
-            dist16x8_b0 = vld1q_s16(dist->bands[0] + index);
+            ref16x4_low = vld1_s16(ref->bands[0] + index);
+            dist16x4_low = vld1_s16(dist->bands[0] + index);
+            ref16x4_high = vld1_s16(ref->bands[0] + index + 4);
+            dist16x4_high = vld1_s16(dist->bands[0] + index + 4);
 
-            tmpRef16x8_low = vget_low_s16(ref16x8_b0);
-            tmpDist16x8_low = vget_low_s16(dist16x8_b0);
-
-            var32x4_lb0 = vmull_s16(tmpRef16x8_low, tmpRef16x8_low);
-            var32x4_hb0 = vmull_high_s16(ref16x8_b0, ref16x8_b0);
-            var32x4_lb0 = vmlal_s16(var32x4_lb0, tmpDist16x8_low, tmpDist16x8_low);
-            var32x4_hb0 = vmlal_high_s16(var32x4_hb0, dist16x8_b0, dist16x8_b0);
-            cov32x4_lb0 = vmull_s16(tmpRef16x8_low, tmpDist16x8_low);
-            cov32x4_hb0 = vmull_high_s16(ref16x8_b0, dist16x8_b0);
+            var32x4_lb0 = vmull_s16(ref16x4_low, ref16x4_low);
+            var32x4_hb0 = vmull_s16(ref16x4_high, ref16x4_high);
+            var32x4_lb0 = vmlal_s16(var32x4_lb0, dist16x4_low, dist16x4_low);
+            var32x4_hb0 = vmlal_s16(var32x4_hb0, dist16x4_high, dist16x4_high);
+            cov32x4_lb0 = vmull_s16(ref16x4_low, dist16x4_low);
+            cov32x4_hb0 = vmull_s16(ref16x4_high, dist16x4_high);
 
             lDen32x4_lb0 = vshrq_n_s32(var32x4_lb0, SSIM_INTER_L_SHIFT);
             lDen32x4_hb0 = vshrq_n_s32(var32x4_hb0, SSIM_INTER_L_SHIFT);
@@ -75,39 +71,41 @@ int integer_compute_ssim_funque_neon(i_dwt2buffers *ref, i_dwt2buffers *dist, do
             addlDen32x4_lb0 = vaddq_s32(lDen32x4_lb0, dupC1);
             addlDen32x4_hb0 = vaddq_s32(lDen32x4_hb0, dupC1);
 
-            ref16x8_b1 = vld1q_s16(ref->bands[1] + index);
-            dist16x8_b1 = vld1q_s16(dist->bands[1] + index);
-            ref16x8_b2 = vld1q_s16(ref->bands[2] + index);
-            dist16x8_b2 = vld1q_s16(dist->bands[2] + index);
-            ref16x8_b3 = vld1q_s16(ref->bands[3] + index);
-            dist16x8_b3 = vld1q_s16(dist->bands[3] + index);
+            ref16x4_low = vld1_s16(ref->bands[1] + index);
+            dist16x4_low = vld1_s16(dist->bands[1] + index);
+            ref16x4_high = vld1_s16(ref->bands[1] + index + 4);
+            dist16x4_high = vld1_s16(dist->bands[1] + index + 4);
 
-            tmpRef16x8_low = vget_low_s16(ref16x8_b1);
-            tmpDist16x8_low = vget_low_s16(dist16x8_b1);
-            varX32x4_lb1 = vmull_s16(tmpRef16x8_low, tmpRef16x8_low);
-            varX32x4_hb1 = vmull_high_s16(ref16x8_b1, ref16x8_b1);
-            varY32x4_lb1 = vmull_s16(tmpDist16x8_low, tmpDist16x8_low);
-            varY32x4_hb1 = vmull_high_s16(dist16x8_b1, dist16x8_b1);
-            cov32x4_lb1 = vmull_s16(tmpRef16x8_low, tmpDist16x8_low);
-            cov32x4_hb1 = vmull_high_s16(ref16x8_b1, dist16x8_b1);
+            varX32x4_lb1 = vmull_s16(ref16x4_low, ref16x4_low);
+            varX32x4_hb1 = vmull_s16(ref16x4_high, ref16x4_high);
+            varY32x4_lb1 = vmull_s16(dist16x4_low, dist16x4_low);
+            varY32x4_hb1 = vmull_s16(dist16x4_high, dist16x4_high);
+            cov32x4_lb1 = vmull_s16(ref16x4_low, dist16x4_low);
+            cov32x4_hb1 = vmull_s16(ref16x4_high, dist16x4_high);
 
-            tmpRef16x8_low = vget_low_s16(ref16x8_b2);
-            tmpDist16x8_low = vget_low_s16(dist16x8_b2);
-            varX32x4_lb1 = vmlal_s16(varX32x4_lb1, tmpRef16x8_low, tmpRef16x8_low);
-            varX32x4_hb1 = vmlal_high_s16(varX32x4_hb1, ref16x8_b2, ref16x8_b2);
-            varY32x4_lb1 = vmlal_s16(varY32x4_lb1, tmpDist16x8_low, tmpDist16x8_low);
-            varY32x4_hb1 = vmlal_high_s16(varY32x4_hb1, dist16x8_b2, dist16x8_b2);
-            cov32x4_lb1 = vmlal_s16(cov32x4_lb1, tmpRef16x8_low, tmpDist16x8_low);
-            cov32x4_hb1 = vmlal_high_s16(cov32x4_hb1, ref16x8_b2, dist16x8_b2);
+            ref16x4_low = vld1_s16(ref->bands[2] + index);
+            dist16x4_low = vld1_s16(dist->bands[2] + index);
+            ref16x4_high = vld1_s16(ref->bands[2] + index + 4);
+            dist16x4_high = vld1_s16(dist->bands[2] + index + 4);
 
-            tmpRef16x8_low = vget_low_s16(ref16x8_b3);
-            tmpDist16x8_low = vget_low_s16(dist16x8_b3);
-            varX32x4_lb1 = vmlal_s16(varX32x4_lb1, tmpRef16x8_low, tmpRef16x8_low);
-            varX32x4_hb1 = vmlal_high_s16(varX32x4_hb1, ref16x8_b3, ref16x8_b3);
-            varY32x4_lb1 = vmlal_s16(varY32x4_lb1, tmpDist16x8_low, tmpDist16x8_low);
-            varY32x4_hb1 = vmlal_high_s16(varY32x4_hb1, dist16x8_b3, dist16x8_b3);
-            cov32x4_lb1 = vmlal_s16(cov32x4_lb1, tmpRef16x8_low, tmpDist16x8_low);
-            cov32x4_hb1 = vmlal_high_s16(cov32x4_hb1, ref16x8_b3, dist16x8_b3);
+            varX32x4_lb1 = vmlal_s16(varX32x4_lb1, ref16x4_low, ref16x4_low);
+            varX32x4_hb1 = vmlal_s16(varX32x4_hb1, ref16x4_high, ref16x4_high);
+            varY32x4_lb1 = vmlal_s16(varY32x4_lb1, dist16x4_low, dist16x4_low);
+            varY32x4_hb1 = vmlal_s16(varY32x4_hb1, dist16x4_high, dist16x4_high);
+            cov32x4_lb1 = vmlal_s16(cov32x4_lb1, ref16x4_low, dist16x4_low);
+            cov32x4_hb1 = vmlal_s16(cov32x4_hb1, ref16x4_high, dist16x4_high);
+
+            ref16x4_low = vld1_s16(ref->bands[3] + index);
+            dist16x4_low = vld1_s16(dist->bands[3] + index);
+            ref16x4_high = vld1_s16(ref->bands[3] + index + 4);
+            dist16x4_high = vld1_s16(dist->bands[3] + index + 4);
+
+            varX32x4_lb1 = vmlal_s16(varX32x4_lb1, ref16x4_low, ref16x4_low);
+            varX32x4_hb1 = vmlal_s16(varX32x4_hb1, ref16x4_high, ref16x4_high);
+            varY32x4_lb1 = vmlal_s16(varY32x4_lb1, dist16x4_low, dist16x4_low);
+            varY32x4_hb1 = vmlal_s16(varY32x4_hb1, dist16x4_high, dist16x4_high);
+            cov32x4_lb1 = vmlal_s16(cov32x4_lb1, ref16x4_low, dist16x4_low);
+            cov32x4_hb1 = vmlal_s16(cov32x4_hb1, ref16x4_high, dist16x4_high);
 
             covSft32x4_lb1 = vshrq_n_s32(cov32x4_lb1, SSIM_INTER_VAR_SHIFTS);
             covSft32x4_hb1 = vshrq_n_s32(cov32x4_hb1, SSIM_INTER_VAR_SHIFTS);
@@ -127,14 +125,14 @@ int integer_compute_ssim_funque_neon(i_dwt2buffers *ref, i_dwt2buffers *dist, do
             addcsDen32x4_hb1 = vaddq_s32(csDen32x4_hb1, dupC2);
 
             mulNum64x2_0lo = vmull_s32(vget_low_s32(addlNum32x4_lb0), vget_low_s32(addcsNum32x4_lb1));
-            mulNum64x2_0hi = vmull_high_s32(addlNum32x4_lb0, addcsNum32x4_lb1);
+            mulNum64x2_0hi = vmull_s32(vget_high_s32(addlNum32x4_lb0), vget_high_s32(addcsNum32x4_lb1));
             mulNum64x2_1lo = vmull_s32(vget_low_s32(addlNum32x4_hb0), vget_low_s32(addcsNum32x4_hb1));
-            mulNum64x2_1hi = vmull_high_s32(addlNum32x4_hb0, addcsNum32x4_hb1);
+            mulNum64x2_1hi = vmull_s32(vget_high_s32(addlNum32x4_hb0), vget_high_s32(addcsNum32x4_hb1));
 
             mulDen64x2_0lo = vmull_s32(vget_low_s32(addlDen32x4_lb0), vget_low_s32(addcsDen32x4_lb1));
-            mulDen64x2_0hi = vmull_high_s32(addlDen32x4_lb0, addcsDen32x4_lb1);
+            mulDen64x2_0hi = vmull_s32(vget_high_s32(addlDen32x4_lb0), vget_high_s32(addcsDen32x4_lb1));
             mulDen64x2_1lo = vmull_s32(vget_low_s32(addlDen32x4_hb0), vget_low_s32(addcsDen32x4_hb1));
-            mulDen64x2_1hi = vmull_high_s32(addlDen32x4_hb0, addcsDen32x4_hb1);
+            mulDen64x2_1hi = vmull_s32(vget_high_s32(addlDen32x4_hb0), vget_high_s32(addcsDen32x4_hb1));
 
             vst1q_s64(numVal + j, mulNum64x2_0lo);
             vst1q_s64(numVal + j + 2, mulNum64x2_0hi);
@@ -195,8 +193,8 @@ int integer_compute_ssim_funque_neon(i_dwt2buffers *ref, i_dwt2buffers *dist, do
     ssim_std = sqrt(MAX(0, ((double)accum_map_sq - ssim_mean * ssim_mean)));
     *score = (ssim_std / ssim_mean);
 
-    free(numVal);
-    free(denVal);
+    //free(numVal);
+    //free(denVal);
     ret = 0;
     return ret;
 }

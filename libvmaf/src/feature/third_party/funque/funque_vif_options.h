@@ -21,17 +21,10 @@
 #ifndef VIF_OPTIONS_H_
 #define VIF_OPTIONS_H_
 
-/* Whether to use an alternate arrangement of the core VIF statistic. */
-#define VIF_OPT_ALTERNATE_STATISTIC
-
-/* Whether to use an approximate implementation of log2 / log2f. */
-#define VIF_OPT_FAST_LOG2
-
-/* Whether to save intermedate results to files. */
-/* #define VIF_OPT_DEBUG_DUMP */
-
-/* Whether to keep the borders of the image after filtering. */
-#define VIF_OPT_HANDLE_BORDERS
+#define VIF_STABILITY 0
+#if VIF_STABILITY
+#define USE_DYNAMIC_SIGMA_NSQ 1
+#endif
 
 /* Enhancement gain imposed on vif, must be >= 1.0, where 1.0 means the gain is completely disabled */
 #define DEFAULT_VIF_ENHN_GAIN_LIMIT (100.0)

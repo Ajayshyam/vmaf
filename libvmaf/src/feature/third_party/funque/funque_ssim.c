@@ -20,6 +20,7 @@
 #include <mem.h>
 #include <stdlib.h>
 #include "funque_filters.h"
+#include "funque_ssim_options.h"
 
 int compute_ssim_funque(dwt2buffers *ref, dwt2buffers *dist, double *score, int max_val, float K1, float K2)
 {
@@ -30,8 +31,8 @@ int compute_ssim_funque(dwt2buffers *ref, dwt2buffers *dist, double *score, int 
 
     int n_levels = 1;
 
-    size_t width = ref->width;
-    size_t height = ref->height;
+    int width = ref->width;
+    int height = ref->height;
 
     float C1 = (K1 * max_val) * (K1 * max_val);
     float C2 = (K2 * max_val) * (K2 * max_val);
@@ -49,6 +50,10 @@ int compute_ssim_funque(dwt2buffers *ref, dwt2buffers *dist, double *score, int 
     //float* l = (float*)malloc(sizeof(float) * width * height);
     //float* cs = (float*)malloc(sizeof(float) * width * height);
     float* map = (float*)malloc(sizeof(float) * width * height);
+
+#if ENABLE_MINK3POOL
+    float cube_1minus_map = 0;
+#endif
 
     int win_dim = 1 << n_levels;
     int win_size = (1 << (n_levels << 1));
@@ -80,10 +85,18 @@ int compute_ssim_funque(dwt2buffers *ref, dwt2buffers *dist, double *score, int 
             l = (2 * mx * my + C1) / ((mx * mx) + (my * my) + C1);
             cs = (2 * cov_xy[index] + C2) / (var_x[index] + var_y[index] + C2);
             map[index] = l * cs;
+#if ENABLE_MINK3POOL
+            cube_1minus_map += pow((1 - map[index]), 3);
+#else
             sum += (l * cs);
+#endif
         }
     }
 
+#if ENABLE_MINK3POOL
+    double ssim_val = 1 - cbrt((double)cube_1minus_map/(width*height));
+    *score = ssim_clip(ssim_val, 0, 1);
+#else
     float ssim_mean = sum / (height * width);
     float sd = 0;
     for (int i = 0; i < (height * width); i++)
@@ -97,7 +110,7 @@ int compute_ssim_funque(dwt2buffers *ref, dwt2buffers *dist, double *score, int 
         return ssim_mean;
     else if (strcmp(pool, "cov"))*/
     *score = (ssim_std / ssim_mean);
-
+#endif
     free(var_x);
     free(var_y);
     free(cov_xy);

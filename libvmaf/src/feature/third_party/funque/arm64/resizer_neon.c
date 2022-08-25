@@ -23,12 +23,19 @@
 #include <arm_neon.h>
 #include <time.h>
 #include "../resizer.h"
+#include "resizer_neon.h"
 
+#if OPTIMISED_COEFF
+void hresize_neon(const unsigned char **src, int **dst, int count,
+                  const short *alpha,
+                  int swidth, int dwidth, int cn, int xmin, int xmax)
+#else
 void hresize_neon(const unsigned char **src, int **dst, int count,
                   const int *xofs, const short *alpha,
                   int swidth, int dwidth, int cn, int xmin, int xmax)
+#endif
 {
-    int first_col_count = 0;
+    // int first_col_count = 0;
     uint8x8_t src1_8x8, src2_8x8, src3_8x8;
     int simd_loop = (xmax / 8) * 8;
     int num_pix = 8;
@@ -192,7 +199,11 @@ static int clip_neon(int x, int a, int b)
     return x >= a ? (x < b ? x : b - 1) : a;
 }
 
+#if OPTIMISED_COEFF
+void step_neon(const unsigned char *_src, unsigned char *_dst, const short *_alpha, const short *_beta, int iwidth, int iheight, int dwidth, int channels, int ksize, int start, int end, int xmin, int xmax)
+#else
 void step_neon(const unsigned char *_src, unsigned char *_dst, const int *xofs, const int *yofs, const short *_alpha, const short *_beta, int iwidth, int iheight, int dwidth, int dheight, int channels, int ksize, int start, int end, int xmin, int xmax)
+#endif
 {
     int dy, cn = channels;
 
@@ -246,19 +257,25 @@ void step_neon(const unsigned char *_src, unsigned char *_dst, const int *xofs, 
             prev_sy[k] = sy;
         }
 
-        if (k0 < ksize)
-        {
-            hresize_neon((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
-                         iwidth, dwidth, cn, xmin, xmax);
-        }
+        
 
 #if OPTIMISED_COEFF
+        if (k0 < ksize)
+        {
+            hresize_neon((srows + k0), (rows + k0), ksize - k0, _alpha,
+                         iwidth, dwidth, cn, xmin, xmax);
+        }
 #if USE_C_VRESIZE
         vresize((const int **)rows, (_dst + dwidth * dy), _beta, dwidth);
 #elif !USE_C_VRESIZE
         vresize_neon((const int **)rows, (_dst + dwidth * dy), _beta, dwidth);
 #endif
 #else
+        if (k0 < ksize)
+        {
+            hresize_neon((srows + k0), (rows + k0), ksize - k0, xofs, _alpha,
+                         iwidth, dwidth, cn, xmin, xmax);
+        }
 #if USE_C_VRESIZE
         vresize((const int **)rows, (_dst + dwidth * dy), beta, dwidth);
 #elif !USE_C_VRESIZE

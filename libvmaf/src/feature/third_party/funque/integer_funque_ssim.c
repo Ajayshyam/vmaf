@@ -21,8 +21,8 @@
 #include <assert.h>
 #include "integer_funque_filters.h"
 #include "integer_funque_ssim.h"
-
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#include "funque_ssim_options.h"
+// #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
 static inline int16_t get_best_i16_from_u64(uint64_t temp, int *power)
 {
@@ -38,8 +38,8 @@ int integer_compute_ssim_funque(i_dwt2buffers *ref, i_dwt2buffers *dist, double 
 {
     int ret = 1;
 
-    size_t width = ref->width;
-    size_t height = ref->height;
+    int width = ref->width;
+    int height = ref->height;
 
     /**
      * C1 is constant is added to ref^2, dist^2, 
@@ -64,10 +64,16 @@ int integer_compute_ssim_funque(i_dwt2buffers *ref, i_dwt2buffers *dist, double 
     ssim_inter_dtype var_x_band0, var_y_band0, cov_xy_band0;
     ssim_inter_dtype l_num, l_den, cs_num, cs_den;
 
+#if ENABLE_MINK3POOL
+    ssim_accum_dtype rowcube_1minus_map = 0;
+    double accumcube_1minus_map = 0;
+    const ssim_inter_dtype const_1 = 32768;  //div_Q_factor>>SSIM_SHIFT_DIV
+#else
     ssim_accum_dtype accum_map = 0;
     ssim_accum_dtype accum_map_sq = 0;
     ssim_accum_dtype map_sq_insum = 0;
-    
+#endif
+
     int index = 0;
     for (int i = 0; i < height; i++)
     {
@@ -137,10 +143,24 @@ int integer_compute_ssim_funque(i_dwt2buffers *ref, i_dwt2buffers *dist, double 
              * Shift by 30 might be very high even for 32 bits precision, hence shift only by 15 
             */
             map = ((map_num >> power_val) * div_lookup[i16_map_den + 32768]) >> SSIM_SHIFT_DIV;
+#if ENABLE_MINK3POOL
+            ssim_accum_dtype const1_minus_map = const_1 - map;
+            rowcube_1minus_map += const1_minus_map * const1_minus_map * const1_minus_map;
+#else
             accum_map += map;
             map_sq_insum += (ssim_accum_dtype)(((ssim_accum_dtype) map * map));
+#endif
         }
+#if ENABLE_MINK3POOL
+        accumcube_1minus_map += (double) rowcube_1minus_map;
+        rowcube_1minus_map = 0;
+#endif
     }
+
+#if ENABLE_MINK3POOL
+    double ssim_val = 1 - cbrt(accumcube_1minus_map/(width*height))/const_1;
+    *score = ssim_clip(ssim_val, 0, 1);
+#else
     accum_map_sq = map_sq_insum / (height * width);
 
     double ssim_mean = (double)accum_map / (height * width);
@@ -150,7 +170,7 @@ int integer_compute_ssim_funque(i_dwt2buffers *ref, i_dwt2buffers *dist, double 
     ssim_std = sqrt(MAX(0, ((double) accum_map_sq - ssim_mean*ssim_mean)));
 
     *score = (ssim_std / ssim_mean);
-
+#endif
     ret = 0;
 
     return ret;

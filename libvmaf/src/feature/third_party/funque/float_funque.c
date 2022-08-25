@@ -220,7 +220,6 @@ static int init(VmafFeatureExtractor *fex, enum VmafPixelFormat pix_fmt,
                 unsigned bpc, unsigned w, unsigned h)
 {
     (void)pix_fmt;
-    (void)bpc;
 
     FunqueState *s = fex->priv;
     s->feature_name_dict =
@@ -238,10 +237,12 @@ static int init(VmafFeatureExtractor *fex, enum VmafPixelFormat pix_fmt,
 
     if(s->enable_resize)
     {
-        s->res_ref_pic.data[0]  = aligned_malloc(s->float_stride * h, 32); 
-        if (!s->res_ref_pic.data[0]) goto fail;
+        s->res_ref_pic.data[0] = aligned_malloc(s->float_stride * h, 32);
+        if (!s->res_ref_pic.data[0])
+            goto fail;
         s->res_dist_pic.data[0] = aligned_malloc(s->float_stride * h, 32);
-        if (!s->res_dist_pic.data[0]) goto fail;
+        if (!s->res_dist_pic.data[0])
+            goto fail;
     }
 
     s->ref = aligned_malloc(s->float_stride * h, 32);
@@ -301,12 +302,12 @@ fail:
     return -ENOMEM;
 }
 
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+// #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-static double convert_to_db(double score, double max_db)
-{
-    return MIN(-10. * log10(1 - score), max_db);
-}
+// static double convert_to_db(double score, double max_db)
+// {
+//     return MIN(-10. * log10(1 - score), max_db);
+// }
 
 static int extract(VmafFeatureExtractor *fex,
                    VmafPicture *ref_pic, VmafPicture *ref_pic_90,
@@ -353,9 +354,15 @@ static int extract(VmafFeatureExtractor *fex,
         res_dist_pic->pix_fmt = dist_pic->pix_fmt;
         res_dist_pic->ref = dist_pic->ref;
 
-        resize(s->resize_module ,ref_pic->data[0], res_ref_pic->data[0], ref_pic->w[0], ref_pic->h[0], res_ref_pic->w[0], res_ref_pic->h[0]);
-        resize(s->resize_module ,dist_pic->data[0], res_dist_pic->data[0], dist_pic->w[0], dist_pic->h[0], res_dist_pic->w[0], res_dist_pic->h[0]);
-
+        if (ref_pic->bpc == 8)
+            resize(s->resize_module ,ref_pic->data[0], res_ref_pic->data[0], ref_pic->w[0], ref_pic->h[0], res_ref_pic->w[0], res_ref_pic->h[0]);
+        else
+            hbd_resize((unsigned short *)ref_pic->data[0], (unsigned short *)res_ref_pic->data[0], ref_pic->w[0], ref_pic->h[0], res_ref_pic->w[0], res_ref_pic->h[0], ref_pic->bpc);
+        
+        if (dist_pic->bpc == 8)
+            resize(s->resize_module ,dist_pic->data[0], res_dist_pic->data[0], dist_pic->w[0], dist_pic->h[0], res_dist_pic->w[0], res_dist_pic->h[0]);
+        else
+            hbd_resize((unsigned short *)dist_pic->data[0], (unsigned short *)res_dist_pic->data[0], dist_pic->w[0], dist_pic->h[0], res_dist_pic->w[0], res_dist_pic->h[0], dist_pic->bpc);
     }
     else{
         res_ref_pic = ref_pic;
@@ -370,20 +377,20 @@ static int extract(VmafFeatureExtractor *fex,
     funque_picture_copy(s->ref, s->float_stride, res_ref_pic, 0, ref_pic->bpc);
     funque_picture_copy(s->dist, s->float_stride, res_dist_pic, 0, dist_pic->bpc);
 
+
 #if PROFILE_IND_MODULES
     gettimeofday(&pictcopy_end, NULL);
     prefil_start_time = pictcopy_end;
 #endif
-    //TODO: Move to lookup table for optimization
-    int bitdepth_pow2 = (int) pow(2, res_ref_pic->bpc) - 1;
 
-    //TODO: Create a new picture copy function with normalization?
+    int bitdepth_pow2 = (1 << res_ref_pic->bpc) - 1;
+
     normalize_bitdepth(s->ref, s->ref, bitdepth_pow2, s->float_stride, res_ref_pic->w[0], res_ref_pic->h[0]);
     normalize_bitdepth(s->dist, s->dist, bitdepth_pow2, s->float_stride, res_dist_pic->w[0], res_dist_pic->h[0]);
 
-    spatial_filter(s->ref, s->spat_filter, s->float_stride, res_ref_pic->w[0], res_ref_pic->h[0]);
+    spatial_filter(s->ref, s->spat_filter, res_ref_pic->w[0], res_ref_pic->h[0]);
     funque_dwt2(s->spat_filter, &s->ref_dwt2out, s->float_stride/2, res_ref_pic->w[0], res_ref_pic->h[0]);
-    spatial_filter(s->dist, s->spat_filter, s->float_stride, res_dist_pic->w[0], res_dist_pic->h[0]);
+    spatial_filter(s->dist, s->spat_filter, res_dist_pic->w[0], res_dist_pic->h[0]);
     funque_dwt2(s->spat_filter, &s->dist_dwt2out, s->float_stride/2, res_dist_pic->w[0], res_dist_pic->h[0]);
     
 #if PROFILE_IND_MODULES
@@ -443,9 +450,14 @@ static int extract(VmafFeatureExtractor *fex,
 #endif
 
     double vif_score[MAX_VIF_LEVELS], vif_score_num[MAX_VIF_LEVELS], vif_score_den[MAX_VIF_LEVELS];
-    
+
+#if USE_DYNAMIC_SIGMA_NSQ    
+    err = compute_vif_funque(s->ref_dwt2out.bands[0], s->dist_dwt2out.bands[0], s->ref_dwt2out.width, s->ref_dwt2out.height,
+                                &vif_score[0], &vif_score_num[0], &vif_score_den[0], 9, 1, (double)5.0, 0);
+#else
     err = compute_vif_funque(s->ref_dwt2out.bands[0], s->dist_dwt2out.bands[0], s->ref_dwt2out.width, s->ref_dwt2out.height,
                                 &vif_score[0], &vif_score_num[0], &vif_score_den[0], 9, 1, (double)5.0);
+#endif
     if (err) return err;
 
     int vifdwt_stride = (s->float_stride+3)/4;
@@ -462,8 +474,14 @@ static int extract(VmafFeatureExtractor *fex,
         vifdwt_stride = (vifdwt_stride + 1)/2;
         vifdwt_width = (vifdwt_width + 1)/2;
         vifdwt_height = (vifdwt_height + 1)/2;
+#if USE_DYNAMIC_SIGMA_NSQ
+        err = compute_vif_funque(s->ref_dwt2out.bands[vif_level], s->dist_dwt2out.bands[vif_level], vifdwt_width, vifdwt_height, 
+                                    &vif_score[vif_level], &vif_score_num[vif_level], &vif_score_den[vif_level], 9, 1, (double)5.0, vif_level);
+#else
         err = compute_vif_funque(s->ref_dwt2out.bands[vif_level], s->dist_dwt2out.bands[vif_level], vifdwt_width, vifdwt_height, 
                                     &vif_score[vif_level], &vif_score_num[vif_level], &vif_score_den[vif_level], 9, 1, (double)5.0);
+
+#endif
         if (err) return err;
     }
 

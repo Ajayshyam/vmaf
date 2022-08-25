@@ -1,5 +1,7 @@
 #include "../integer_funque_filters.h"
 #include <arm_neon.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #define FILTER_SHIFT (1 + DWT2_OUT_SHIFT)
 #define FILTER_SHIFT_RND (1 << (FILTER_SHIFT - 1))
@@ -151,14 +153,14 @@ void integer_funque_dwt2_neon(spat_fil_output_dtype *src, i_dwt2buffers *dwt2_ds
     }
 }
 
-static inline void integer_horizontal_filter_neon(spat_fil_inter_dtype *tmp, spat_fil_output_dtype *dst, const spat_fil_coeff_dtype *i_filter_coeffs, int width, int height, int fwidth, int dst_row_idx, int half_fw)
+static inline void integer_horizontal_filter_neon(spat_fil_inter_dtype *tmp, spat_fil_output_dtype *dst, const spat_fil_coeff_dtype *i_filter_coeffs, int width, int fwidth, int dst_row_idx, int half_fw)
 {
     int j, fj, jj, jj1, jj2;
 	int ker_wid = width - 2 * half_fw;
-	int ker_wid_8 = ker_wid - ker_wid%8;
+	// int ker_wid_8 = ker_wid - ker_wid%8;
 	int ker_wid_rem = ker_wid%8;
 	
-	int16x8_t src16x8_in0, src16x8_in1, src16x8_in2, src16x8_in3;
+	// int16x8_t src16x8_in0, src16x8_in1, src16x8_in2, src16x8_in3;
 	int16x8_t src16x8_0, src16x8_1, src16x8_2, src16x8_3, src16x8_4, src16x8_5;
 	int16x8_t src16x8_6, src16x8_7, src16x8_8, src16x8_9, src16x8_10, src16x8_11;
 	int16x8_t src16x8_12, src16x8_13, src16x8_14, src16x8_15, src16x8_16;
@@ -359,10 +361,11 @@ void integer_spatial_filter_neon(void *void_src, spat_fil_output_dtype *dst, int
     }
     uint8_t *src = (uint8_t*) void_src;
     spat_fil_inter_dtype *tmp = malloc(src_px_stride * sizeof(spat_fil_inter_dtype));
-    spat_fil_inter_dtype imgcoeff;
-    spat_fil_inter_dtype *tmp_int = tmp;
-    int i, j, fi, fj, ii, jj, jj1, jj2, ii1, ii2;
-    spat_fil_coeff_dtype *coeff_ptr;
+    // spat_fil_inter_dtype imgcoeff;
+    // spat_fil_inter_dtype *tmp_int = tmp;
+    int i, j, fi, ii, ii1, ii2;
+    // int fj, jj, jj1, jj2, 
+    // spat_fil_coeff_dtype *coeff_ptr;
     int fwidth = 21;
     int half_fw = fwidth / 2;
 	
@@ -374,7 +377,7 @@ void integer_spatial_filter_neon(void *void_src, spat_fil_output_dtype *dst, int
 	int16x8_t src16x8_i_lo, src16x8_i_hi;
 	int32x4_t accum_0_lo, accum_0_hi, accum_1_lo, accum_1_hi;
     int16x4_t tmp16x4_0, tmp16x4_1, tmp16x4_2, tmp16x4_3 ;
-	uint8x16_t src8x16_00, src8x16_01, src8x16_10, src8x16_11;
+	// uint8x16_t src8x16_00, src8x16_01, src8x16_10, src8x16_11;
 	uint8x8_t src8x8_00_lo, src8x8_01_lo, src8x8_10_lo, src8x8_11_lo;
 	uint8x8_t src8x8_20_lo, src8x8_21_lo, src8x8_30_lo, src8x8_31_lo;
 	uint8x8_t src8x8_40_lo, src8x8_41_lo, src8x8_50_lo, src8x8_51_lo;
@@ -422,7 +425,7 @@ void integer_spatial_filter_neon(void *void_src, spat_fil_output_dtype *dst, int
             tmp[j] = (spat_fil_inter_dtype) ((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
         }
         /* Horizontal pass. */
-        integer_horizontal_filter_neon(tmp, dst, i_filter_coeffs, width, height, fwidth, i*dst_px_stride, half_fw);
+        integer_horizontal_filter_neon(tmp, dst, i_filter_coeffs, width, fwidth, i*dst_px_stride, half_fw);
     }
 	
     //This is the core loop
@@ -433,7 +436,7 @@ void integer_spatial_filter_neon(void *void_src, spat_fil_output_dtype *dst, int
         /* Vertical pass. */
         for (j = 0; j < width_rem_size; j += 16){
 
-            spat_fil_accum_dtype accum = 0;
+            // spat_fil_accum_dtype accum = 0;
 			
 			src8x8_i_lo  = vld1_u8(src + i * src_px_stride + j); 
 			src8x8_i_hi  = vld1_u8(src + i * src_px_stride + j + 8); 
@@ -593,7 +596,7 @@ void integer_spatial_filter_neon(void *void_src, spat_fil_output_dtype *dst, int
 				tmp[j] = (spat_fil_inter_dtype) ((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
 		}
         /* Horizontal pass. */
-        integer_horizontal_filter_neon(tmp, dst, i_filter_coeffs, width, height, fwidth, i*dst_px_stride, half_fw);
+        integer_horizontal_filter_neon(tmp, dst, i_filter_coeffs, width, fwidth, i*dst_px_stride, half_fw);
     }
     /**
      * This loop is to handle virtual padding of the bottom border pixels
@@ -630,7 +633,7 @@ void integer_spatial_filter_neon(void *void_src, spat_fil_output_dtype *dst, int
             tmp[j] = (spat_fil_inter_dtype) ((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
         }
         /* Horizontal pass. */
-        integer_horizontal_filter_neon(tmp, dst, i_filter_coeffs, width, height, fwidth, i*dst_px_stride, half_fw);
+        integer_horizontal_filter_neon(tmp, dst, i_filter_coeffs, width, fwidth, i*dst_px_stride, half_fw);
     }
 	
     free(tmp);

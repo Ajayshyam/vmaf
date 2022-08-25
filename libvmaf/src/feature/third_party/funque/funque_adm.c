@@ -19,6 +19,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdlib.h>
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -36,21 +37,21 @@
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
+static inline float clip(float value, float low, float high)
+{
+  return value < low ? low : (value > high ? high : value);
+}
+
 #ifdef __SSE2__
 #ifdef ADM_OPT_RECIP_DIVISION
 
 #include <emmintrin.h>
 
-static float rcp_s(float x)
-{
-  float xi = _mm_cvtss_f32(_mm_rcp_ss(_mm_load_ss(&x)));
-  return xi + xi * (1.0f - x * xi);
-}
-
-static inline float clip(float value, float low, float high)
-{
-  return value < low ? low : (value > high ? high : value);
-}
+// static float rcp_s(float x)
+// {
+//   float xi = _mm_cvtss_f32(_mm_rcp_ss(_mm_load_ss(&x)));
+//   return xi + xi * (1.0f - x * xi);
+// }
 
 #define DIVS(n, d) ((n)*rcp_s(d))
 #endif // ADM_OPT_RECIP_DIVISION
@@ -58,10 +59,10 @@ static inline float clip(float value, float low, float high)
 #define DIVS(n, d) ((n) / (d))
 #endif // __SSE2__
 
-void reflect_pad_adm(const float *src, size_t width, size_t height, int reflect, float *dest)
+void reflect_pad_adm(const float *src, int width, int height, int reflect, float *dest)
 {
-  size_t out_width = width + 2 * reflect;
-  size_t out_height = height + 2 * reflect;
+  int out_width = width + 2 * reflect;
+  int out_height = height + 2 * reflect;
   int i, j;
   static int cnt = 0;
   cnt++;
@@ -91,7 +92,7 @@ void reflect_pad_adm(const float *src, size_t width, size_t height, int reflect,
   }
 }
 
-void integral_image_adm(const float *src, size_t width, size_t height, float *sum)
+void integral_image_adm(const float *src, int width, int height, float *sum)
 {
   int i, j;
   for (i = 0; i < (height + 1); ++i)
@@ -134,8 +135,8 @@ void integral_image_adm_sums(float *x, int k, int stride, float *mx, int width, 
 
   reflect_pad_adm(x, width, height, x_reflect, x_pad);
 
-  size_t r_width = width + (2 * x_reflect);
-  size_t r_height = height + (2 * x_reflect);
+  int r_width = width + (2 * x_reflect);
+  int r_height = height + (2 * x_reflect);
 
   int_x = (float *)calloc((r_width + 1) * (r_height + 1), sizeof(float));
 
@@ -158,11 +159,11 @@ void dlm_decouple(dwt2buffers ref, dwt2buffers dist, dwt2buffers dlm_rest, dwt2b
   const float cos_1deg_sq = cos(1.0 * M_PI / 180.0) * cos(1.0 * M_PI / 180.0);
 #endif
   float eps = 1e-30;
-  size_t width = ref.width;
-  size_t height = ref.height;
+  int width = ref.width;
+  int height = ref.height;
   int i, j, k, index;
 
-  float *var_k;
+  // float *var_k;
   float val;
   float tmp_val;
   int angle_flag;
@@ -215,7 +216,7 @@ void dlm_decouple(dwt2buffers ref, dwt2buffers dist, dwt2buffers dlm_rest, dwt2b
 #endif
 }
 
-void dlm_contrast_mask_one_way(dwt2buffers pyr_1, dwt2buffers pyr_2, dwt2buffers masked_pyr, size_t width, size_t height)
+void dlm_contrast_mask_one_way(dwt2buffers pyr_1, dwt2buffers pyr_2, dwt2buffers masked_pyr, int width, int height)
 {
   int i, k, j, index;
   float val = 0;
@@ -264,11 +265,11 @@ void dlm_contrast_mask_one_way(dwt2buffers pyr_1, dwt2buffers pyr_2, dwt2buffers
   free(integral_sum);
 }
 
-int compute_adm_funque(dwt2buffers ref, dwt2buffers dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, float border_size)
+int compute_adm_funque(dwt2buffers ref, dwt2buffers dist, double *adm_score, double *adm_score_num, double *adm_score_den, int width, int height, float border_size)
 {
   // TODO: assert len(pyr_ref) == len(pyr_dist),'Pyramids must be of equal height.'
 
-  int n_levels = 1;
+  // int n_levels = 1;
   int i, j, k, index;
   double num_sum = 0, den_sum = 0, num_band = 0, den_band = 0;
   dwt2buffers dlm_rest, dlm_add, pyr_rest;

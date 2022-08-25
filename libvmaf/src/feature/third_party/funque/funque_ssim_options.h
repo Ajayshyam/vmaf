@@ -16,14 +16,14 @@
  *
  */
 
-#include "funque_vif_options.h"
+#ifndef FUNQUE_SSIM_OPTIONS_H_
+#define FUNQUE_SSIM_OPTIONS_H_
 
-#if USE_DYNAMIC_SIGMA_NSQ
-int compute_vif_funque(const float* x, const float* y, size_t width, size_t height, 
-                        double* score, double* score_num, double* score_den, int k, 
-                        int stride, double sigma_nsq_arg, int vif_level);
-#else
-int compute_vif_funque(const float* x, const float* y, size_t width, size_t height, 
-                        double* score, double* score_num, double* score_den, int k, 
-                        int stride, double sigma_nsq_arg);
-#endif
+#define ENABLE_MINK3POOL 0
+
+static inline double ssim_clip(double value, double low, double high)
+{
+  return value < low ? low : (value > high ? high : value);
+}
+
+#endif //FUNQUE_SSIM_OPTIONS_H_

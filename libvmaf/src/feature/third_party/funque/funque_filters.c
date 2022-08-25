@@ -41,7 +41,7 @@ void funque_dwt2(float *src, dwt2buffers *dwt2_dst, ptrdiff_t dst_stride, int wi
     float *band_d = dwt2_dst->bands[3];
 
     int16_t row_idx0, row_idx1, col_idx0, col_idx1;
-    for (unsigned i=0; i < (height+1)/2; ++i)
+    for (int i=0; i < (height+1)/2; ++i)
     {
         row_idx0 = 2*i;
         // row_idx0 = row_idx0 < height ? row_idx0 : height;
@@ -49,13 +49,13 @@ void funque_dwt2(float *src, dwt2buffers *dwt2_dst, ptrdiff_t dst_stride, int wi
         row_idx1 = row_idx1 < height ? row_idx1 : 2*i;
 
         /* Vertical pass. */
-        for(unsigned j=0; j<width; ++j){
+        for(int j=0; j<width; ++j){
             tmplo[j] = filter_coeff * (src[(row_idx0)*width+j] + src[(row_idx1)*width+j]);
             tmphi[j] = filter_coeff * (src[(row_idx0)*width+j] - src[(row_idx1)*width+j]);
         }
 
         /* Horizontal pass (lo and hi). */
-        for(unsigned j=0; j<(width+1)/2; ++j)
+        for(int j=0; j<(width+1)/2; ++j)
         {
             col_idx0 = 2*j;
             col_idx1 = 2*j+1;
@@ -81,7 +81,7 @@ void funque_vifdwt2_band0(float *src, float *band_a, ptrdiff_t dst_stride, int w
     float *tmplo = aligned_malloc(ALIGN_CEIL(width * sizeof(float)), MAX_ALIGN);
 
     int16_t row_idx0, row_idx1, col_idx0, col_idx1;
-    for (unsigned i=0; i < (height+1)/2; ++i)
+    for (int i=0; i < (height+1)/2; ++i)
     {
         row_idx0 = 2*i;
         // row_idx0 = row_idx0 < height ? row_idx0 : height;
@@ -89,13 +89,13 @@ void funque_vifdwt2_band0(float *src, float *band_a, ptrdiff_t dst_stride, int w
         row_idx1 = row_idx1 < height ? row_idx1 : 2*i;
 
         /* Vertical pass. */
-        for(unsigned j=0; j<width; ++j){
+        for(int j=0; j<width; ++j){
 
             tmplo[j] = filter_coeff * (src[(row_idx0)*width+j] + src[(row_idx1)*width+j]);
         }
 
         /* Horizontal pass (lo and hi). */
-        for(unsigned j=0; j<(width+1)/2; ++j)
+        for(int j=0; j<(width+1)/2; ++j)
         {
             col_idx0 = 2*j;
             col_idx1 = 2*j+1;
@@ -108,7 +108,7 @@ void funque_vifdwt2_band0(float *src, float *band_a, ptrdiff_t dst_stride, int w
 }
 
 //Convolution using coefficients from python workspace
-void spatial_filter(float *src, float *dst, ptrdiff_t dst_stride, int width, int height)
+void spatial_filter(float *src, float *dst, int width, int height)
 {
     //Copied the coefficients from python coefficients
         float filter_coeffs[21] = {
@@ -189,8 +189,8 @@ void spatial_filter(float *src, float *dst, ptrdiff_t dst_stride, int width, int
 
 void normalize_bitdepth(float *src, float *dst, int scaler, ptrdiff_t dst_stride, int width, int height)
 {
-    for (unsigned i = 0; i < height; i++) {
-        for (unsigned j = 0; j < width; j++) {
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
             dst[j] = src[j] / scaler;
         }
         dst += dst_stride / sizeof(float);
