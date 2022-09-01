@@ -1,5 +1,8 @@
 
 #include <arm_neon.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "integer_funque_filters_armv7.h"
 
 #define FILTER_SHIFT (1 + DWT2_OUT_SHIFT)
@@ -163,7 +166,7 @@ void integer_funque_dwt2_armv7(spat_fil_output_dtype *src, i_dwt2buffers *dwt2_d
     }
 }
 
-static inline void integer_horizontal_filter_armv7(spat_fil_inter_dtype *tmp, spat_fil_output_dtype *dst, const spat_fil_coeff_dtype *i_filter_coeffs, int width, int height, int fwidth, int dst_row_idx, int half_fw)
+static inline void integer_horizontal_filter_armv7(spat_fil_inter_dtype *tmp, spat_fil_output_dtype *dst, const spat_fil_coeff_dtype *i_filter_coeffs, int width, int fwidth, int dst_row_idx, int half_fw)
 {
     int j, fj, jj, jj1, jj2;
     int ker_wid = width - 2 * half_fw;
@@ -428,7 +431,7 @@ void integer_spatial_filter_armv7(void *void_src, spat_fil_output_dtype *dst, in
             tmp[j] = (spat_fil_inter_dtype)((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
         }
         /* Horizontal pass. */
-        integer_horizontal_filter_armv7(tmp, dst, i_filter_coeffs, width, height, fwidth, i * dst_px_stride, half_fw);
+        integer_horizontal_filter_armv7(tmp, dst, i_filter_coeffs, width, fwidth, i * dst_px_stride, half_fw);
     }
 
     // This is the core loop
@@ -600,7 +603,7 @@ void integer_spatial_filter_armv7(void *void_src, spat_fil_output_dtype *dst, in
             tmp[j] = (spat_fil_inter_dtype)((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
         }
         /* Horizontal pass. */
-        integer_horizontal_filter_armv7(tmp, dst, i_filter_coeffs, width, height, fwidth, i * dst_px_stride, half_fw);
+        integer_horizontal_filter_armv7(tmp, dst, i_filter_coeffs, width, fwidth, i * dst_px_stride, half_fw);
     }
     /**
      * This loop is to handle virtual padding of the bottom border pixels
@@ -640,7 +643,7 @@ void integer_spatial_filter_armv7(void *void_src, spat_fil_output_dtype *dst, in
             tmp[j] = (spat_fil_inter_dtype)((accum + SPAT_FILTER_INTER_RND) >> SPAT_FILTER_INTER_SHIFT);
         }
         /* Horizontal pass. */
-        integer_horizontal_filter_armv7(tmp, dst, i_filter_coeffs, width, height, fwidth, i * dst_px_stride, half_fw);
+        integer_horizontal_filter_armv7(tmp, dst, i_filter_coeffs, width, fwidth, i * dst_px_stride, half_fw);
     }
 
     free(tmp);

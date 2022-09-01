@@ -58,6 +58,7 @@ void integer_funque_dwt2(spat_fil_output_dtype *src, i_dwt2buffers *dwt2_dst, pt
 	int last_col = width & 1;
 
     int i, j;
+    
     for (i=0; i < (height+1)/2; ++i)
     {
         row_idx0 = 2*i;
@@ -155,6 +156,7 @@ void integer_funque_vifdwt2_band0(dwt2_dtype *src, dwt2_dtype *band_a, ptrdiff_t
 	int last_col = width & 1;
 
     int i, j;
+
     for (i=0; i < (height+1)/2; ++i)
     {
         row_idx0 = 2*i;
@@ -178,11 +180,13 @@ void integer_funque_vifdwt2_band0(dwt2_dtype *src, dwt2_dtype *band_a, ptrdiff_t
 			
 			//a + b	& a - b	
 			int32_t src_a_p_b = src_a + src_b;
+
 			// int32_t src_a_m_b = src_a - src_b;
 			
 			//c + d	& c - d
 			int32_t src_c_p_d = src_c + src_d;
 			// int32_t src_c_m_d = src_c - src_d;
+
 			
 			//F* F (a + b + c + d) - band A  (F*F is 1/2)
 			band_a[i*dst_px_stride+j] = (dwt2_dtype) (((src_a_p_b + src_c_p_d) + filter_shift_rnd) >> filter_shift);
@@ -199,7 +203,6 @@ void integer_funque_vifdwt2_band0(dwt2_dtype *src, dwt2_dtype *band_a, ptrdiff_t
 			
 			//a + b	& a - b	
 			int src_a_p_b = src_a + src_b;
-			// int src_a_m_b = src_a - src_b;
 			
             //F* F (a + b + a + b) - band A  (F*F is 1/2)
 			band_a[i*dst_px_stride+j] = (dwt2_dtype) ((src_a_p_b + filter_shift_lcpad_rnd) >> filter_shift_lcpad);
@@ -210,6 +213,7 @@ void integer_funque_vifdwt2_band0(dwt2_dtype *src, dwt2_dtype *band_a, ptrdiff_t
 /**
  * This function applies intermediate horizontal pass filter inside spatial filter
  */
+
 static inline void integer_horizontal_filter(spat_fil_inter_dtype *tmp, spat_fil_output_dtype *dst, const spat_fil_coeff_dtype *i_filter_coeffs, int width, int fwidth, int dst_row_idx, int half_fw)
 {
     int j, fj, jj, jj1, jj2;
@@ -308,6 +312,7 @@ void integer_spatial_filter(void *src, spat_fil_output_dtype *dst, int width, in
     int dst_px_stride = width;
 
     spat_fil_inter_dtype *tmp = aligned_malloc(ALIGN_CEIL(src_px_stride * sizeof(spat_fil_inter_dtype)), MAX_ALIGN);
+
     // spat_fil_inter_dtype imgcoeff;
 	uint8_t *src_8b = NULL;
 	uint16_t *src_hbd = NULL;
@@ -345,6 +350,7 @@ void integer_spatial_filter(void *src, spat_fil_output_dtype *dst, int width, in
         int pro_mir_end = -diff_i_halffw - 1;
 
         /* Vertical pass. */
+
 		if(8 == bitdepth)
 		{
 			for (j = 0; j < width; j++){
@@ -403,6 +409,7 @@ void integer_spatial_filter(void *src, spat_fil_output_dtype *dst, int width, in
 
         /* Horizontal pass. common for 8bit and hbd cases */
         integer_horizontal_filter(tmp, dst, i_filter_coeffs, width, fwidth, i*dst_px_stride, half_fw);
+
     }
     //This is the core loop
     for ( ; i < (height - half_fw); i++){
@@ -410,6 +417,7 @@ void integer_spatial_filter(void *src, spat_fil_output_dtype *dst, int width, in
         int f_l_i = i - half_fw;
         int f_r_i = i + half_fw;
         /* Vertical pass. */
+
 		if(8 == bitdepth)
 		{
 			for (j = 0; j < width; j++){
@@ -454,6 +462,7 @@ void integer_spatial_filter(void *src, spat_fil_output_dtype *dst, int width, in
 
         /* Horizontal pass. common for 8bit and hbd cases */
         integer_horizontal_filter(tmp, dst, i_filter_coeffs, width, fwidth, i*dst_px_stride, half_fw);
+
     }
     /**
      * This loop is to handle virtual padding of the bottom border pixels
@@ -465,6 +474,7 @@ void integer_spatial_filter(void *src, spat_fil_output_dtype *dst, int width, in
         int epi_last_i  = height - diff_i_halffw;
         
         /* Vertical pass. */
+
 		if(8 == bitdepth)
 		{
 			for (j = 0; j < width; j++){
@@ -523,9 +533,11 @@ void integer_spatial_filter(void *src, spat_fil_output_dtype *dst, int width, in
 
         /* Horizontal pass. common for 8bit and hbd cases */
         integer_horizontal_filter(tmp, dst, i_filter_coeffs, width, fwidth, i*dst_px_stride, half_fw);
+
     }
 
     aligned_free(tmp);
 
     return;
 }
+

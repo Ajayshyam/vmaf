@@ -70,12 +70,21 @@ FORCE_INLINE inline uint32_t get_best_u18_from_u64(uint64_t temp, int *x)
 /**
  * This function accumulates the numerator and denominator values & their powers 
  */
+#if VIF_STABILITY
+static inline void vif_stats_calc(int32_t int_1_x, int32_t int_1_y, 
+                             int64_t int_2_x, int64_t int_2_y, int64_t int_x_y, 
+                             int16_t knorm_fact, int16_t knorm_shift,  
+                             int16_t exp, int32_t sigma_nsq, uint32_t *log_18,
+                             int64_t *score_num, int64_t *num_power,
+                             int64_t *score_den, int64_t *den_power,int64_t shift_val, int k_norm)
+#else
 static inline void vif_stats_calc(int32_t int_1_x, int32_t int_1_y, 
                              int64_t int_2_x, int64_t int_2_y, int64_t int_x_y, 
                              int16_t knorm_fact, int16_t knorm_shift,  
                              int16_t exp, int32_t sigma_nsq, uint32_t *log_18,
                              int64_t *score_num, int64_t *num_power,
                              int64_t *score_den, int64_t *den_power)
+#endif                          
 {
     int32_t mx = int_1_x;
     int32_t my = int_1_y;
@@ -157,6 +166,15 @@ static inline void vif_stats_calc(int32_t int_1_x, int32_t int_1_y,
 
 //This function does summation of horizontal intermediate_vertical_sums & then 
 //numerator denominator score calculations are done
+#if VIF_STABILITY
+static inline void vif_horz_integralsum(int kw, int width_p1, 
+                                   int16_t knorm_fact, int16_t knorm_shift, 
+                                   int16_t exp, int32_t sigma_nsq, uint32_t *log_18,
+                                   int32_t *interim_1_x, int32_t *interim_1_y,
+                                   int64_t *interim_2_x, int64_t *interim_2_y, int64_t *interim_x_y,
+                                   int64_t *score_num, int64_t *num_power,
+                                   int64_t *score_den, int64_t *den_power, int64_t shift_val, int k_norm)
+#else
 static inline void vif_horz_integralsum(int kw, int width_p1, 
                                    int16_t knorm_fact, int16_t knorm_shift, 
                                    int16_t exp, int32_t sigma_nsq, uint32_t *log_18,
@@ -164,6 +182,7 @@ static inline void vif_horz_integralsum(int kw, int width_p1,
                                    int64_t *interim_2_x, int64_t *interim_2_y, int64_t *interim_x_y,
                                    int64_t *score_num, int64_t *num_power,
                                    int64_t *score_den, int64_t *den_power)
+#endif
 {
     int32_t int_1_x, int_1_y;
     int64_t int_2_x, int_2_y, int_x_y;
@@ -195,10 +214,17 @@ static inline void vif_horz_integralsum(int kw, int width_p1,
      * whose interim result calc is different from rest of the columns, 
      * hence calling vif_stats_calc for kw column separately 
      */
+#if VIF_STABILITY
+    vif_stats_calc(int_1_x, int_1_y, int_2_x, int_2_y, int_x_y,
+                    knorm_fact, knorm_shift, 
+                    exp, sigma_nsq, log_18,
+                    score_num, num_power, score_den, den_power, shift_val, k_norm);
+#else
     vif_stats_calc(int_1_x, int_1_y, int_2_x, int_2_y, int_x_y,
                     knorm_fact, knorm_shift, 
                     exp, sigma_nsq, log_18,
                     score_num, num_power, score_den, den_power);
+#endif
 
     //Similar to prev loop, but previous kw col interim metric sum is subtracted
     for (int j=kw+1; j<width_p1; j++)
@@ -212,12 +238,18 @@ static inline void vif_horz_integralsum(int kw, int width_p1,
         
         int_x_y = interim_x_y[j] + int_x_y - interim_x_y[j - kw];
 
+#if VIF_STABILITY
+        vif_stats_calc(int_1_x, int_1_y, int_2_x, int_2_y, int_x_y,
+                        knorm_fact, knorm_shift, 
+                        exp, sigma_nsq, log_18, 
+                        score_num, num_power, score_den, den_power, shift_val, k_norm);
+#else
         vif_stats_calc(int_1_x, int_1_y, int_2_x, int_2_y, int_x_y,
                         knorm_fact, knorm_shift, 
                         exp, sigma_nsq, log_18, 
                         score_num, num_power, score_den, den_power);
+#endif
     }
-
 }
 
 #endif /* _FEATURE_INTFUNQUE_VIF_H_ */

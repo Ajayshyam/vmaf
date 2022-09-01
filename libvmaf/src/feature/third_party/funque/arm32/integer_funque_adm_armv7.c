@@ -16,7 +16,7 @@ void integer_dlm_decouple_armv7(i_dwt2buffers ref, i_dwt2buffers dist,
     adm_i32_dtype ot_dp, o_mag_sq, t_mag_sq;
     int border_h = (border_size * height);
     int border_w = (border_size * width);
-    int64_t den_sum[3] = {0};
+    double den_sum[3] = {0};
     int64_t den_row_sum[3] = {0};
     int64_t col0_ref_cube[3] = {0};
     int loop_h, loop_w, dlm_width, dlm_height;
@@ -79,12 +79,12 @@ void integer_dlm_decouple_armv7(i_dwt2buffers ref, i_dwt2buffers dist,
     uint16x8_t dupConst1 = vdupq_n_u16(1);
     int32x4_t dupConstZero = vdupq_n_s32(0);
 
-    int32_t buf1_adm_div[8] = {};
-    int32_t buf2_adm_div[8] = {};
-    int32_t buf3_adm_div[8] = {};
-    int32_t buf_ot_dp[8] = {};
-    int64_t buf_ot_dp_sq[8] = {};
-    int64_t buf_ot_mag[8] = {};
+    int32_t buf1_adm_div[8] = {0};
+    int32_t buf2_adm_div[8] = {0};
+    int32_t buf3_adm_div[8] = {0};
+    int32_t buf_ot_dp[8] = {0};
+    int64_t buf_ot_dp_sq[8] = {0};
+    int64_t buf_ot_mag[8] = {0};
 
     dwt2_dtype *refBandH = ref.bands[1];
     dwt2_dtype *refBandV = ref.bands[2];

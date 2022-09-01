@@ -22,7 +22,6 @@
 #include "integer_funque_filters.h"
 #include "integer_funque_ssim.h"
 #include "funque_ssim_options.h"
-// #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
 static inline int16_t get_best_i16_from_u64(uint64_t temp, int *power)
 {
@@ -143,6 +142,7 @@ int integer_compute_ssim_funque(i_dwt2buffers *ref, i_dwt2buffers *dist, double 
              * Shift by 30 might be very high even for 32 bits precision, hence shift only by 15 
             */
             map = ((map_num >> power_val) * div_lookup[i16_map_den + 32768]) >> SSIM_SHIFT_DIV;
+
 #if ENABLE_MINK3POOL
             ssim_accum_dtype const1_minus_map = const_1 - map;
             rowcube_1minus_map += const1_minus_map * const1_minus_map * const1_minus_map;

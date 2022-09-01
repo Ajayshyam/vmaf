@@ -47,7 +47,7 @@ void integer_adm_integralimg_numscore_c(i_dwt2buffers pyr_1, int32_t *x_pad, int
                                      adm_i32_dtype *interim_x, float border_size, double *adm_score_num)
 {    
     int i, j, index;
-    // adm_i32_dtype pyr_abs;
+
     int64_t num_sum[3] = {0};
     double accum_num[3] = {0};
 	/**
@@ -61,12 +61,14 @@ void integer_adm_integralimg_numscore_c(i_dwt2buffers pyr_1, int32_t *x_pad, int
     int border_w = (border_size * width);
     // int loop_h, loop_w; 
     int dlm_width, dlm_height;
+
 	int extra_sample_h = 0, extra_sample_w = 0;
 	
 	/**
 	DLM has the configurability of computing the metric only for the
 	centre region. currently border_size defines the percentage of pixels to be avoided
 	from all sides so that size of centre region is defined.
+
 	*/	
 #if ADM_REFLECT_PAD
     extra_sample_w = 0;
@@ -85,8 +87,6 @@ void integer_adm_integralimg_numscore_c(i_dwt2buffers pyr_1, int32_t *x_pad, int
     border_w = MAX(1,border_w);
 #endif
 	
-    // loop_h = height - border_h;
-    // loop_w = width - border_w;
 	
 	dlm_height = height - (border_h << 1);
 	dlm_width = width - (border_w << 1);
@@ -109,6 +109,7 @@ void integer_adm_integralimg_numscore_c(i_dwt2buffers pyr_1, int32_t *x_pad, int
          * prev_inter_sum will have prev rows inter_sum and 
          * The previous k row metric val is not subtracted since it is not available here 
          */
+
         for (j=1; j<r_width_p1; j++)
         {
             interim_x[j] = interim_x[j] + x_pad[src_offset + j - 1];
@@ -118,6 +119,7 @@ void integer_adm_integralimg_numscore_c(i_dwt2buffers pyr_1, int32_t *x_pad, int
      * The integral score is used from kxk offset of 2D array
      * Hence horizontal summation of 1st k rows are not used, hence that compuattion is avoided
      */
+
     // int row_offset = k * r_width_p1;
     xpad_i = r_width + 1;
     //When padding is disabled extra row, col would be available, 
@@ -147,11 +149,14 @@ void integer_adm_integralimg_numscore_c(i_dwt2buffers pyr_1, int32_t *x_pad, int
             interim_x[j] = interim_x[j] + x_pad[src_offset + j - 1] - x_pad[pre_k_src_offset + j - 1];
         }
         xpad_i = (i+1-k)*(r_width) + 1;
+        
         index = (i+extra_sample_h-k) * dlm_width + extra_sample_w;
+
         //horizontal summation & numerator score accumulation
         num_sum[0] = 0;
         num_sum[1] = 0;
         num_sum[2] = 0;
+
         adm_horz_integralsum(k, r_width_p1, num_sum, interim_x, 
                                 x_pad, xpad_i, index, pyr_1);
         accum_num[0] += num_sum[0];
@@ -172,6 +177,7 @@ void integer_adm_decouple_c(i_dwt2buffers ref, i_dwt2buffers dist,
                           int32_t *adm_div_lookup, float border_size, double *adm_score_den)
 {
     // const float cos_1deg_sq = COS_1DEG_SQ;
+
     size_t width = ref.width;
     size_t height = ref.height;
     int i, j, k, index, addIndex,restIndex;
@@ -182,12 +188,14 @@ void integer_adm_decouple_c(i_dwt2buffers ref, i_dwt2buffers dist,
     adm_i32_dtype ot_dp, o_mag_sq, t_mag_sq;
     int border_h = (border_size * height);
     int border_w = (border_size * width);
-	int64_t den_sum[3] = {0};
+	double den_sum[3] = {0};
     int64_t den_row_sum[3] = {0};
     int64_t col0_ref_cube[3] = {0};
     int loop_h, loop_w, dlm_width, dlm_height;
 	int extra_sample_h = 0, extra_sample_w = 0;
+
 	adm_i64_dtype den_cube[3] = {0};
+
 
 	/**
 	DLM has the configurability of computing the metric only for the
@@ -200,6 +208,7 @@ void integer_adm_decouple_c(i_dwt2buffers ref, i_dwt2buffers dist,
 #else
     extra_sample_w = 1;
     extra_sample_h = 1;
+
 #endif
 	
 	border_h -= extra_sample_h;
@@ -234,8 +243,10 @@ void integer_adm_decouple_c(i_dwt2buffers ref, i_dwt2buffers dist,
         for (j = border_w; j < loop_w; j++)
         {
             index = i * width + j;
+
             //If padding is enabled the computation of i_dlm_add will be from 1,1 & later padded
             addIndex = (i + ADM_REFLECT_PAD - border_h) * (dlm_add_w) + j + ADM_REFLECT_PAD - border_w;
+
 			restIndex = (i - border_h) * (dlm_width) + j - border_w;
             ot_dp = ((adm_i32_dtype)ref.bands[1][index] * dist.bands[1][index]) + ((adm_i32_dtype)ref.bands[2][index] * dist.bands[2][index]);
             o_mag_sq = ((adm_i32_dtype)ref.bands[1][index] * ref.bands[1][index]) + ((adm_i32_dtype)ref.bands[2][index] * ref.bands[2][index]);
@@ -291,6 +302,7 @@ void integer_adm_decouple_c(i_dwt2buffers ref, i_dwt2buffers dist,
         if(!extra_sample_w)
 		{
 			addIndex = (i + 1 - border_h) * (dlm_add_w);
+
 			i_dlm_add[addIndex + 0] = i_dlm_add[addIndex + 2];
 			i_dlm_add[addIndex + dlm_width + 1] = i_dlm_add[addIndex + dlm_width - 1];
 		}			
@@ -303,6 +315,7 @@ void integer_adm_decouple_c(i_dwt2buffers ref, i_dwt2buffers dist,
 		int rowLastPadIdx = (dlm_height + 1) * (dlm_add_w);
 
 		memcpy(&i_dlm_add[0], &i_dlm_add[row2Idx], sizeof(int32_t) * (dlm_add_w));
+
 		memcpy(&i_dlm_add[rowLastPadIdx], &i_dlm_add[rowLast2Idx], sizeof(int32_t) * (dlm_width+2));
 	}
     
@@ -318,19 +331,16 @@ void integer_adm_decouple_c(i_dwt2buffers ref, i_dwt2buffers dist,
 
 }
 
+
 int integer_compute_adm_funque(ModuleFunqueState m, i_dwt2buffers i_ref, i_dwt2buffers i_dist, double *adm_score, double *adm_score_num, double *adm_score_den, size_t width, size_t height, float border_size, int32_t *adm_div_lookup)
 {
-    // int i, j, k, index;
-    // adm_i64_dtype num_sum = 0, den_sum = 0;
-    // adm_i32_dtype ref_abs;
-    // adm_i64_dtype num_cube = 0, den_cube = 0;
-    // double num_band = 0, den_band = 0;
     i_dwt2buffers i_dlm_rest;
     adm_i32_dtype *i_dlm_add, *interim_x;
 	int border_h = (border_size * height);
     int border_w = (border_size * width);
 	// int loop_h, loop_w;
     int dlm_width, dlm_height;
+
 	int extra_sample_h = 0, extra_sample_w = 0;
 	
 	/**
@@ -347,6 +357,7 @@ int integer_compute_adm_funque(ModuleFunqueState m, i_dwt2buffers i_ref, i_dwt2b
 #else
     extra_sample_w = 1;
     extra_sample_h = 1;
+
 #endif
 
 	border_h -= extra_sample_h;
@@ -360,6 +371,7 @@ int integer_compute_adm_funque(ModuleFunqueState m, i_dwt2buffers i_ref, i_dwt2b
 
     // loop_h = height - border_h;
     // loop_w = width - border_w;
+
 	
 	dlm_height = height - (border_h << 1);
 	dlm_width = width - (border_w << 1);
@@ -367,6 +379,7 @@ int integer_compute_adm_funque(ModuleFunqueState m, i_dwt2buffers i_ref, i_dwt2b
     i_dlm_rest.bands[1] = (adm_i16_dtype *)malloc(sizeof(adm_i16_dtype) * dlm_height * dlm_width);
     i_dlm_rest.bands[2] = (adm_i16_dtype *)malloc(sizeof(adm_i16_dtype) * dlm_height * dlm_width);
     i_dlm_rest.bands[3] = (adm_i16_dtype *)malloc(sizeof(adm_i16_dtype) * dlm_height * dlm_width);
+
     i_dlm_add = (adm_i32_dtype *)malloc(sizeof(adm_i32_dtype) * (dlm_height+ (ADM_REFLECT_PAD<<1)) * (dlm_width+(ADM_REFLECT_PAD<<1)));
     interim_x = (adm_i32_dtype *)malloc((width + K_INTEGRALIMG_ADM) * sizeof(adm_i32_dtype));
 
@@ -376,6 +389,7 @@ int integer_compute_adm_funque(ModuleFunqueState m, i_dwt2buffers i_ref, i_dwt2b
 
     m.integer_adm_integralimg_numscore(i_dlm_rest, i_dlm_add, K_INTEGRALIMG_ADM, 1, width, height, interim_x, border_size, adm_score_num);
 
+
     *adm_score = (*adm_score_num) / (*adm_score_den);
 
     for (int i = 1; i < 4; i++)
@@ -383,6 +397,7 @@ int integer_compute_adm_funque(ModuleFunqueState m, i_dwt2buffers i_ref, i_dwt2b
         free(i_dlm_rest.bands[i]);
     }
     free(interim_x);
+
     free(i_dlm_add);
     int ret = 0;
     return ret;

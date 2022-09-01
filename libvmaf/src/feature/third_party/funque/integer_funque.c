@@ -94,8 +94,10 @@ typedef struct IntFunqueState
     double max_db;
 
     VmafDictionary *feature_name_dict;
+
     ModuleFunqueState modules;
     ResizerState resize_module;
+
 } IntFunqueState;
 
 static const VmafOption options[] = {
@@ -257,6 +259,7 @@ static int init(VmafFeatureExtractor *fex, enum VmafPixelFormat pix_fmt,
         if (!s->res_ref_pic.data[0])
             goto fail;
         s->res_dist_pic.data[0] = aligned_malloc(s->i_dwt2_stride * h * bitdepth_factor, 32);
+
         if (!s->res_dist_pic.data[0])
             goto fail;
     }
@@ -356,12 +359,6 @@ fail:
     return -ENOMEM;
 }
 
-// #define MIN(x, y) (((x) < (y)) ? (x) : (y))
-
-// static double convert_to_db(double score, double max_db)
-// {
-//     return MIN(-10. * log10(1 - score), max_db);
-// }
 
 static int extract(VmafFeatureExtractor *fex,
                    VmafPicture *ref_pic, VmafPicture *ref_pic_90,
@@ -454,6 +451,7 @@ static int extract(VmafFeatureExtractor *fex,
     s->modules.integer_funque_dwt2(s->spat_filter, &s->i_dist_dwt2out, s->i_dwt2_stride, res_dist_pic->w[0], res_dist_pic->h[0]);
 
     int16_t spatfilter_shifts = 2 * SPAT_FILTER_COEFF_SHIFT - SPAT_FILTER_INTER_SHIFT - SPAT_FILTER_OUT_SHIFT - (res_ref_pic->bpc - 8);
+
     int16_t dwt_shifts = 2 * DWT2_COEFF_UPSHIFT - DWT2_INTER_SHIFT - DWT2_OUT_SHIFT;
     float pending_div_factor = (1 << ( spatfilter_shifts + dwt_shifts)) * bitdepth_pow2;
 
@@ -477,6 +475,7 @@ static int extract(VmafFeatureExtractor *fex,
         double motion_score;
 
         err |= integer_compute_motion_funque(s->modules, s->i_prev_ref_dwt2, s->i_ref_dwt2out.bands[0],
+
                                              s->i_ref_dwt2out.width, s->i_ref_dwt2out.height,
                                              s->i_dwt2_stride, s->i_dwt2_stride,
                                              pending_div_factor,
@@ -500,6 +499,7 @@ static int extract(VmafFeatureExtractor *fex,
     double ssim_score;
 
     err = integer_compute_adm_funque(s->modules, s->i_ref_dwt2out, s->i_dist_dwt2out, &adm_score, &adm_score_num, &adm_score_den, s->i_ref_dwt2out.width, s->i_ref_dwt2out.height, 0.2, s->adm_div_lookup);
+
     if (err)
         return err;
     err |= vmaf_feature_collector_append(feature_collector, "FUNQUE_integer_feature_adm2_score",
@@ -522,6 +522,7 @@ static int extract(VmafFeatureExtractor *fex,
 #endif
 
     double vif_score[MAX_VIF_LEVELS], vif_score_num[MAX_VIF_LEVELS], vif_score_den[MAX_VIF_LEVELS];
+
 
 #if USE_DYNAMIC_SIGMA_NSQ
     err = s->modules.integer_compute_vif_funque(s->i_ref_dwt2out.bands[0], s->i_dist_dwt2out.bands[0], s->i_ref_dwt2out.width, s->i_ref_dwt2out.height, 
@@ -557,6 +558,7 @@ static int extract(VmafFeatureExtractor *fex,
         err = s->modules.integer_compute_vif_funque(s->i_ref_dwt2out.bands[vif_level], s->i_dist_dwt2out.bands[vif_level], vifdwt_width, vifdwt_height, 
                                     &vif_score[vif_level], &vif_score_num[vif_level], &vif_score_den[vif_level], 9, 1, (double)5.0, (int16_t) vif_pending_div, s->log_18); 
 #endif       
+
         if (err) return err;
     }
 

@@ -42,7 +42,7 @@ void integer_adm_decouple_neon(i_dwt2buffers ref, i_dwt2buffers dist,
 
     int border_h = (border_size * height);
     int border_w = (border_size * width);
-    int64_t den_sum[3] = {0};
+    double den_sum[3] = {0};
     int64_t den_row_sum[3] = {0};
     int64_t col0_ref_cube[3] = {0};
     int loop_h, loop_w, dlm_width, dlm_height;

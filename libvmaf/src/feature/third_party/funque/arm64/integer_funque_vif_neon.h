@@ -1,7 +1,5 @@
 
 
-#include "../funque_vif_options.h"
-
 #if USE_DYNAMIC_SIGMA_NSQ
 int integer_compute_vif_funque_neon(const dwt2_dtype* x_t, const dwt2_dtype* y_t, size_t width, size_t height, 
                                     double* score, double* score_num, double* score_den, int k, int stride, 

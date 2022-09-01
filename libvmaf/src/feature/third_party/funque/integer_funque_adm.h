@@ -21,7 +21,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+
 #include <stdlib.h>
+
 #include <string.h>
 #include <math.h>
 
@@ -45,6 +47,7 @@ typedef struct u_adm_buffers
     int width;
     int height;
 } u_adm_buffers;
+
 
 #define ADM_CUBE_SHIFT 8
 #define ADM_CUBE_SHIFT_ROUND (1 << (ADM_CUBE_SHIFT - 1))

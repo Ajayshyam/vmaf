@@ -98,10 +98,10 @@ int integer_compute_vif_funque_c(const dwt2_dtype* x_t, const dwt2_dtype* y_t, s
     size_t r_width = vif_width + (2 * x_reflect); // after reflect pad
     size_t r_height = vif_height + (2 * x_reflect);
 
-    size_t s_width = (r_width + 1) - kw;
-    size_t s_height = (r_height + 1) - kh;
+    
 
     dwt2_dtype* x_pad_t, *y_pad_t;
+
 #if VIF_REFLECT_PAD
     x_pad_t = (dwt2_dtype*)malloc(sizeof(dwt2_dtype*) * (vif_width + (2 * x_reflect)) * (vif_height + (2 * x_reflect)));
     y_pad_t = (dwt2_dtype*)malloc(sizeof(dwt2_dtype*) * (vif_width + (2 * y_reflect)) * (vif_height + (2 * y_reflect)));
@@ -156,7 +156,6 @@ int integer_compute_vif_funque_c(const dwt2_dtype* x_t, const dwt2_dtype* y_t, s
         //1st loop, prev kh row is not available to subtract during vertical summation
         for (i=1; i<kh+1; i++)
         {
-            // int row_offset = i * width_p1;
             int src_offset = (i-1) * r_width;
 
             /**
@@ -192,16 +191,23 @@ int integer_compute_vif_funque_c(const dwt2_dtype* x_t, const dwt2_dtype* y_t, s
          * Hence horizontal sum of first kh rows are not used, hence that computation is avoided
          */
         //score computation for 1st row of variance & covariance i.e. kh row of padded img
+#if VIF_STABILITY
+        vif_horz_integralsum(kw, width_p1, knorm_fact, knorm_shift, 
+                             exp_t, sigma_nsq_t, log_18,
+                             interim_1_x, interim_1_y,
+                             interim_2_x, interim_2_y, interim_x_y,
+                             &score_num_t, &num_power, &score_den_t, &den_power, shift_val, k_norm);
+#else
         vif_horz_integralsum(kw, width_p1, knorm_fact, knorm_shift, 
                              exp_t, sigma_nsq_t, log_18,
                              interim_1_x, interim_1_y,
                              interim_2_x, interim_2_y, interim_x_y,
                              &score_num_t, &num_power, &score_den_t, &den_power);
+#endif
 
         //2nd loop, core loop 
         for(; i<height_p1; i++)
         {
-            // int row_offset = i * width_p1;
             int src_offset = (i-1) * r_width;
             int pre_kh_src_offset = (i-1-kh) * r_width;
             /**
@@ -235,12 +241,21 @@ int integer_compute_vif_funque_c(const dwt2_dtype* x_t, const dwt2_dtype* y_t, s
             }
 
             //horizontal summation and score compuations
+#if VIF_STABILITY
+            vif_horz_integralsum(kw, width_p1, knorm_fact, knorm_shift,  
+                                 exp_t, sigma_nsq_t, log_18, 
+                                 interim_1_x, interim_1_y,
+                                 interim_2_x, interim_2_y, interim_x_y,
+                                 &score_num_t, &num_power, 
+                                 &score_den_t, &den_power, shift_val, k_norm);
+#else
             vif_horz_integralsum(kw, width_p1, knorm_fact, knorm_shift,  
                                  exp_t, sigma_nsq_t, log_18, 
                                  interim_1_x, interim_1_y,
                                  interim_2_x, interim_2_y, interim_x_y,
                                  &score_num_t, &num_power, 
                                  &score_den_t, &den_power);
+#endif
         }
 
         free(interim_2_x);
@@ -250,15 +265,17 @@ int integer_compute_vif_funque_c(const dwt2_dtype* x_t, const dwt2_dtype* y_t, s
         free(interim_x_y);
     }
 
-    double add_exp = 1e-4*s_height*s_width;
-
     double power_double_num = (double)num_power;
     double power_double_den = (double)den_power;
+
 #if VIF_STABILITY
 	*score_num = (((double)score_num_t/(double)(1<<26)) + power_double_num);
     *score_den = (((double)score_den_t/(double)(1<<26)) + power_double_den);
 	*score += ((*score_den) == 0.0) ? 1.0 : ((*score_num) / (*score_den));
 #else
+    size_t s_width = (r_width + 1) - kw;
+    size_t s_height = (r_height + 1) - kh;
+    double add_exp = 1e-4*s_height*s_width;
     *score_num = (((double)score_num_t/(double)(1<<26)) + power_double_num) + add_exp;
     *score_den = (((double)score_den_t/(double)(1<<26)) + power_double_den) + add_exp;
     *score = *score_num / *score_den;

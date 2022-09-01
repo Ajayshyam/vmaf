@@ -47,6 +47,7 @@ void hresize(const unsigned char **src, int **dst, int count,
              const int *xofs, const short *alpha,
              int swidth, int dwidth, int cn, int xmin, int xmax)
 #endif
+
 {
     for (int k = 0; k < count; k++)
     {
@@ -281,7 +282,7 @@ void resize(ResizerState m, const unsigned char *_src, unsigned char *_dst, int 
             xofs[dx * cn + k] = sx + k;
 
         interpolateCubic(fx, cbuf);
-
+        
         for (k = 0; k < ksize; k++)
             ialpha[dx * cn * ksize + k] = (short)(cbuf[k] * INTER_RESIZE_COEF_SCALE);
         for (; k < cn * ksize; k++)
@@ -303,6 +304,4 @@ void resize(ResizerState m, const unsigned char *_src, unsigned char *_dst, int 
     }
     m.resizer_step(_src, _dst, xofs, yofs, ialpha, ibeta, iwidth, iheight, dwidth, dheight, cn, ksize, 0, dheight, xmin, xmax);
 #endif
-    
-    
 }

@@ -21,6 +21,7 @@
 #include <stdint.h>
 
 #include "config.h"
+
 #include "funque_vif_options.h"
 #define ADM_REFLECT_PAD 0
 #define VIF_REFLECT_PAD 1
